@@ -4,8 +4,6 @@ import snappy
 import gc
 from snappy import ProductIO, GPF
 
-# from rsgislib.segmentation import segutils
-
 # Get snappy Operators
 snappy.GPF.getDefaultInstance().getOperatorSpiRegistry().loadOperatorSpis()
 # HashMap Key-Value pairs
