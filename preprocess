@@ -4,24 +4,27 @@ import snappy
 import gc
 from snappy import ProductIO, GPF
 
+# from rsgislib.segmentation import segutils
+
 # Get snappy Operators
 snappy.GPF.getDefaultInstance().getOperatorSpiRegistry().loadOperatorSpis()
 # HashMap Key-Value pairs
 HashMap = snappy.jpy.get_type('java.util.HashMap')
 gc.enable()
 # Working directory
-input_dir = "/mnt/DD/Bonds_Project/Aurea_Project/Input/S1A/"
+input_dir = "/mnt/DD/Bonds_Project/Aurea_Project/Input/test/"
 images_list = []
 s1list = []
 
 
 class Image:
     VVcalibFile = ''
+    coregistrationlist = []
 
     def __init__(self, path):
         # Basic attributes
         self.path = path
-        self.imgpath = ProductIO.readProduct(path)
+        #self.imgpath = ProductIO.readProduct(path)
         self.timestamp = path.split('_')[6:7]
         # Orbit file
         self.orbFile = ''
@@ -92,7 +95,7 @@ class Image:
         self.timestamp = usertimestamp
 
     def datafolder(self, cor):
-        # on veut creer une fonction qui renvoie une chaine de caractere pour un object
+        # on veut creer une fonction qui renvoie une chaine de caractere path  pour un object image
         # de type /inputdir/string_timestamp.data/
         data = ''
         try:
@@ -105,6 +108,7 @@ class Image:
         return data
 
     def openImg(self):
+        # Open image with Snap reader
         res = ProductIO.readProduct(self.path)
         return res
 
@@ -116,6 +120,10 @@ class Image:
         """
         if self.orb:
             print('file already exists')
+        elif "orb_" + ''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+            self.orbFile = input_dir + "orb_" + ''.join(self.getTimestamp())
+            print('file has already been proccessed')
+            pass
         else:
 
             # ---------initialisation des parametres
@@ -124,7 +132,7 @@ class Image:
             orbit_param = snappy.GPF.createProduct("Apply-Orbit-File", parameters, ProductIO.readProduct(self.path))
             #
             # --------Output
-            self.orbFile = input_dir + "/orb_" + ''.join(self.getTimestamp())
+            self.orbFile = input_dir + "orb_" + ''.join(self.getTimestamp())
             ProductIO.writeProduct(orbit_param, self.orbFile,
                                    'BEAM-DIMAP')  # on cree un objet qu'on rempli avec le tableau image
             print(str(self.getTimestamp()) + " is done ")
@@ -140,6 +148,12 @@ class Image:
         print("Now applying calibration")
         if self.calib:
             print('file already exists')
+            pass
+        elif 'VVcalib_'+''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+            self.VVcalibFile = input_dir+'VVcalib_'+''.join(self.getTimestamp())
+            self.VHcalibFile = input_dir+'VHcalib_'+''.join(self.getTimestamp())
+            print(' file has already been calibrated')
+            pass
         else:
             # initialisation des parametres
             parameters = HashMap()
@@ -147,10 +161,10 @@ class Image:
             parameters.put('outputBetaBand', True)
             parameters.put('outputGammaBand', True)
             parameters.put("outputImageScaleInDb", False)
-            self.VVcalibFile = input_dir + "/VVcalib_" + ''.join(self.getTimestamp())
-            self.VHcalibFile = input_dir + '/VHcalib_' + ''.join(self.getTimestamp())
+            self.VVcalibFile = input_dir + "VVcalib_" + ''.join(self.getTimestamp())
+            self.VHcalibFile = input_dir + 'VHcalib_' + ''.join(self.getTimestamp())
             calib_param = snappy.GPF.createProduct("Calibration", parameters,
-                                                   ProductIO.readProduct(self.orbFile))
+                                                   ProductIO.readProduct(self.orbFile+'.dim'))
             # ----Writing
             # ---VV
             ProductIO.writeProduct(calib_param, self.VVcalibFile, 'BEAM-DIMAP')
@@ -162,24 +176,29 @@ class Image:
             # Deleting old stuff
             if self.orb:
                 try:
-                    for things in input_dir + '/orb_' + ''.join(self.getTimestamp()) + '/data':
+                    for things in input_dir + 'orb_' + ''.join(self.getTimestamp()) + '/data':
                         os.remove(things)
-                    os.removedirs(input_dir + '/orb_' + ''.join(self.getTimestamp()) + '/data')
+                    os.removedirs(input_dir + 'orb_' + ''.join(self.getTimestamp()) + '/data')
                 except OSError:
                     pass
             return self.VVcalibFile, self.VHcalibFile, self.calib
 
     def applyTerrainCorrection(self):
+        # Apply Terrain Flattening on a  Calibrated file
         VVcalibFile = ''
         print "Now applying terrain correction"
-
+        # LEt us check if it exists
         if self.terr:
             print('file already exists')
+        elif 'VVcalib_' + ''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+            print('file has already been calibrated adding to desc')
+            self.VVterrainFlatFile = input_dir + 'VVcalib_' + ''.join(self.getTimestamp())
+            self.VHterrainFlatFile = input_dir + 'VHcalib_' + ''.join(self.getTimestamp())
         else:
             # Output
 
-            self.VVterrainFlatFile = input_dir + "/VVterr_" + ''.join(self.getTimestamp())
-            self.VHterrainFlatFile = input_dir + '/VHterr_' + ''.join(self.getTimestamp())
+            self.VVterrainFlatFile = input_dir + "VVterr_" + ''.join(self.getTimestamp())
+            self.VHterrainFlatFile = input_dir + 'VHterr_' + ''.join(self.getTimestamp())
 
             # ---------Parameters-------
             parameters = HashMap()
@@ -207,10 +226,10 @@ class Image:
             if VVcalibFile:  # We assume VH exists if VV exists , thus reading
                 # ------------Reading
                 VVterr_param = snappy.GPF.createProduct("Terrain-Flattening", parameters,
-                                                        ProductIO.readProduct(getattr(self, 'VVcalibFile')))
+                                                        ProductIO.readProduct(self.VVcalibFile+'.dim'))
                 # --  VH  --
                 VHterr_param = snappy.GPF.createProduct("Terrain-Flattening", parameters,
-                                                        ProductIO.readProduct(getattr(self, 'VHcalibFile')))
+                                                        ProductIO.readProduct(self.VHcalibFile+'.dim'))
                 # ----- Writing----
                 ProductIO.writeProduct(VVterr_param, self.VVterrainFlatFile, 'BEAM-DIMAP')
                 print str(self.VVterrainFlatFile) + " is done "
@@ -232,6 +251,12 @@ class Image:
         print("Now applying Orthorectification")
         if self.orth:
             print("file already exists")
+
+        elif 'VVorth_'+''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+            print('file has already been geo corrected adding to desc')
+            self.VVorthoCorrFile = input_dir + "VVorth_" + ''.join(self.getTimestamp())
+            self.VHorthoCorrFile = input_dir + 'VHorth_' + ''.join(self.getTimestamp())
+
         else:
             # Validity check
             try:
@@ -244,16 +269,18 @@ class Image:
             if VVcalibFile:
                 # -------initialisation des parametres
                 parameters = HashMap()
+                parameters.put('demResamplingMethod', 'BICUBIC_INTERPOLATION')
+                parameters.put('demName', 'SRTM 1Sec HGT')
                 # ------------Output----
-                self.VVorthFile = input_dir + "/VVorth_" + ''.join(self.getTimestamp())
-                self.VHorthFile = input_dir + '/VHorth_' + ''.join(self.getTimestamp())
+                self.VVorthoCorrFile = input_dir + "VVorth_" + ''.join(self.getTimestamp())
+                self.VHorthoCorrFile = input_dir + 'VHorth_' + ''.join(self.getTimestamp())
                 # --------Reading---------
                 # VH
-                VHorth_param = snappy.GPF.createProduct("Range-Doppler-Terrain-Correction", parameters,
-                                                        ProductIO.readProduct(getattr(self, 'VVterrainFlatFile')))
+                VHorth_param = snappy.GPF.createProduct("Terrain-Correction", parameters,
+                                                        ProductIO.readProduct(self.VVterrainFlatFile+'.dim'))
                 # VV
-                VVorth_param = snappy.GPF.createProduct("Range-Doppler-Terrain-Correction", parameters,
-                                                        ProductIO.readProduct(getattr(self, 'VHterrainFlatFile')))
+                VVorth_param = snappy.GPF.createProduct("Terrain-Correction", parameters,
+                                                        ProductIO.readProduct(self.VHterrainFlatFile+'.dim'))
                 # --------writing-------
                 # VV
                 ProductIO.writeProduct(VHorth_param, self.VHorthoCorrFile, 'BEAM-DIMAP')
@@ -278,6 +305,11 @@ class Image:
         # check if file has already been speckle filtered
         if self.speck:
             print("file already exists")
+        elif "VVspeck_" + ''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+            self.VVspeckFile = input_dir + "VVspeck_" + ''.join(self.getTimestamp())
+            self.VHspeckFile = input_dir + "VHspeck_" + ''.join(self.getTimestamp())
+            print('file has already been proccessed')
+            pass
         else:
             # Validity Check
             try:
@@ -297,15 +329,15 @@ class Image:
                 parameters.put('sigma', 0.9)
                 parameters.put('targetWindowSize', "5")
                 # ---------- Output----------
-                self.VVspeckFile = input_dir + "/VVspeck_" + ''.join(self.getTimestamp())
-                self.VHspeckFile = input_dir + "/VHspeck_" + ''.join(self.getTimestamp())
+                self.VVspeckFile = input_dir + "VVspeck_" + ''.join(self.getTimestamp())
+                self.VHspeckFile = input_dir + "VHspeck_" + ''.join(self.getTimestamp())
                 # ----------Reading-------
                 # VV
                 VVspeck_param = snappy.GPF.createProduct("Speckle-Filter", parameters,
-                                                         ProductIO.readProduct(VVInput))
+                                                         ProductIO.readProduct(VVInput+'.dim'))
                 # VH
                 VHspeck_param = snappy.GPF.createProduct("Speckle-Filter", parameters,
-                                                         ProductIO.readProduct(VHInput))
+                                                         ProductIO.readProduct(VHInput+'.dim'))
                 # ------- Writing--------
                 # VV
                 print(" Using speckefiltering on " + str(self.VVspeckFile))
@@ -319,52 +351,56 @@ class Image:
                 self.speck = True
                 return self.VVspeckFile, self.VHspeckFile, self.speck
 
-    def convertToDecibel(self, corvv, corvh):
-        imgFileVV = ''
-        imgFileVH = ''
+    def convertToDecibel(self):
+        # imgFileVV = ''
+        # imgFileVH = ''
         # Convert an img to decibel, cor is actually the type of correction one may set to dB
         if self.dB:
             # check if file has already been speckle filtered
             print("file already exists")
+        elif "VVdB_" + ''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+            self.VVdBFile = input_dir + "VVdB_" + ''.join(self.getTimestamp())
+            self.VHdBFile = input_dir + "VHdB_" + ''.join(self.getTimestamp())
+            print('file has already been proccessed')
+            pass
         else:
             # There are 2 possible inputs, one is a terrain corrected image (orth)
             # The other is a mean raster which wont have a true stack attribute
             # both will have either VV or VH ,
             # corvv = {VVmeanFile, VVorthoCorrFile } , corvh = { VHmeanFile, VHorthoCorrFile}
             try:
-                imgFileVV = getattr(self, corvv)
-                imgFileVH = getattr(self, corvh)
-            except AttributeError:
-                print('correction doesnt exists')
-                pass
-            if imgFileVV is True or imgFileVH is True:
                 print("Now converting to dB")
                 print ("converting Linear to decibel for " + ''.join(self.getTimestamp()))
                 # -------Output
                 # VV , we can insert a try statement here to safe proof the run in case of an unlikely error
-                self.VVdBFile = input_dir + "/VVdB" + ''.join(self.getTimestamp())
+                self.VVdBFile = input_dir + "VVdB" + ''.join(self.getTimestamp())
                 # VH
-                self.VHdBFile = input_dir + "/VHdB" + ''.join(self.getTimestamp())
+                self.VHdBFile = input_dir + "VHdB" + ''.join(self.getTimestamp())
                 # initialisation des parametres
                 parameters = HashMap()
                 # Reading
-                VVdb_param = snappy.GPF.createProduct("LinearToFromdB", parameters, ProductIO.readProduct(imgFileVV))
-                VHdb_param = snappy.GPF.createProduct("LinearToFromdB", parameters, ProductIO.readProduct(imgFileVH))
+                VVdb_param = snappy.GPF.createProduct("LinearToFromdB", parameters,
+                                                      ProductIO.readProduct(self.VVorthoCorrFile + '.dim'))
+                VHdb_param = snappy.GPF.createProduct("LinearToFromdB", parameters,
+                                                      ProductIO.readProduct(self.VHorthoCorrFile + '.dim'))
                 # Writing
-                ProductIO.writeProduct(VVdb_param, self.VVdBFile, 'GeoTIFF')
+                ProductIO.writeProduct(VVdb_param, self.VVdBFile, 'GeoTIFF-BigTIFF')
                 print str(self.VVdBFile) + "is done"
-                ProductIO.writeProduct(VHdb_param, self.VHdBFile, 'GeoTIFF')
+                ProductIO.writeProduct(VHdb_param, self.VHdBFile, 'GeoTIFF-BigTIFF')
                 print str(self.VHdBFile) + "is done"
                 # Return  values
                 self.dB = True
                 return self.VVdBFile, self.VHdBFile, self.dB
+            except AttributeError:
+                print('correction doesnt exists')
+                pass
 
     def converToDecibel(self):
         # We want a function wich take a object , read it into an image and the nperform convert to DB OP
         try:
             print('Converting to DB')
             # Output
-            polarisation = ''
+            # polarisation = ''
             if 'VV' in self.path:
                 polarisation = 'VV_'
             elif 'VH' in self.path:
@@ -387,6 +423,10 @@ class Image:
         self.stack = True
         return stacklist, self.stack
 
+    def addtoCoRegistration(self, coregistrationlist=None):
+        coregistrationlist.append(ProductIO.readProduct(self.path))
+        return coregistrationlist
+
     # def coRegistration(cmd):
     #     stacklistVV = []
     #     print('doing dem coregistration')
@@ -407,9 +447,9 @@ class Image:
 
 
 def imageSearch(folder, extension):
-    images_list = []
-    for images in glob.glob(folder + '/*.' + extension):
-        images_list.append(images)
+    for images in os.listdir(folder):
+        if images.endswith(extension):
+            images_list.append(folder+images)
     print("listes d'images: " + str(images_list))
     return images_list
 
@@ -432,11 +472,10 @@ def createstack(polarisation, stack):
 
 
 def createS1Imglist(inputfolder='', extension='zip'):
-    s1list = []
     if inputfolder:
         folder = inputfolder
     else:
-        folder = "/mnt/DD/Bonds_Project/Aurea_Project/Input/S1A/"
+        folder = "/mnt/DD/Bonds_Project/Aurea_Project/Input/2017/"
     imageSearch(folder, extension)  # The goal here is to fetch a list of path and give it to our variable object
     for path in images_list:
         # a list  named s1list will be created and will get line of path for each image into the path attribute
@@ -457,12 +496,20 @@ def createS1Imglist(inputfolder='', extension='zip'):
 
 def run(inputfolder=''):
     if inputfolder:
+        os.chdir(inputfolder)
+        currentDir = os.getcwd()
+        print(currentDir)
         createS1Imglist(inputfolder)
+        if not s1list:
+            print('list is empty, filling list')
+            for s1 in images_list:
+                s1list.append(Image(s1))
     else:
         inputfolder = input_dir
+        os.chdir(input_dir)
         createS1Imglist(inputfolder)
 
-    print('Step 1 , Preprocessing Images ')
+    print('Step 1 , Preprocessing Image0s ')
 
     for s1img in s1list:
         if isinstance(s1img, Image):
@@ -472,7 +519,7 @@ def run(inputfolder=''):
             s1img.applySpeckleFilter('VVcalibFile', 'VHcalibFile')
             s1img.applyTerrainCorrection()
             s1img.applyOrthorectification()
-            s1img.convertToDecibel('VVorthoCorrFile', 'VHorthoCorrFile')
+            s1img.convertToDecibel()
     print('preprocess is done ')
     print('starting Step 2 , CoRegistration')
     stackVV = []
