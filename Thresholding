@@ -1,0 +1,172 @@
+import glob
+import os
+import sys
+import time
+import gdal
+import cv2
+import scipy
+import scikitplot
+import matplotlib
+import numpy as np
+import skimage
+from matplotlib import pyplot as plt
+from skimage import data
+from skimage.filters import threshold_multiotsu, threshold_otsu, threshold_yen
+from skimage import io
+from skimage import viewer
+from skimage import color
+from skimage import img_as_ubyte
+from skimage import img_as_float64
+from skimage import img_as_uint
+
+# input_dir = "/mnt/DD/Bonds_Project/Aurea_Project/Input/S1A/"
+images_list = []
+s1list = []
+
+
+# OOB algorithm doing multi otsu thresholding on multiple image objects Sentinel 1
+
+
+class Image:
+    def __init__(self, path):
+        # initialize mandatory variables
+        # path is /path/to/file
+        # array is the numpy array
+        # timestamp is for managing chronogically files
+        self.path = path
+        # self.array = io.imread(self.path)
+        self.timestamp = path.split('_')[-1:]
+        intermediatevalue = ''.join(self.timestamp)
+        self.timestamp = intermediatevalue.split('.')[:1]
+
+    def givePath(self, path):
+        # give path to object Image eg : a.givePath(path)
+        self.path = path
+        return self.path
+
+    def giveTimestamp(self, timestamp):
+        # give timestamp to object Image eg : im1.giveTimestamp(timestamp)
+        self.timestamp = timestamp
+        return self.timestamp
+
+    def createTimestamp(self, path):
+        self.timestamp = path.split('_')[6:7]
+        return self.timestamp
+
+    def readImage(self, path):
+        # transform image from a string list (path) to a numpy array readable (array) eg : im1.readImage(path)
+        if not self.path:
+            # If Path was set beforehand , just read it
+            self.array = io.imread(path)
+        else:
+            # otherwise set it
+            self.array = io.imread(self.path)
+        return self.array
+
+    def determineTimeStamp(self):
+        if not self.timestamp:
+            self.timestamp = self.path.split('_')[6:7]
+        else:
+            pass
+
+    def getPath(self):
+        return self.path  # method to return a string like variable ('/mnt/DD/etc)
+
+    def getArray(self):
+        return self.array  # method to return a numpy array
+
+    def getTimestamp(self):
+        # get timestamp from object Image
+        return self.timestamp
+
+    def do_otsu(self):
+        # Single otsu binary threshold
+        self.getTimestamp()
+        inputIm = io.imread(self.path, as_gray=True)
+        threshold = threshold_otsu(inputIm, 256)
+        binary = inputIm < threshold
+        regions = np.digitize(binary, bins=int(threshold))
+        output = img_as_ubyte(regions)
+        plt.imsave('/mnt/DD/Bonds_Project/Aurea_Project/Input/' + ''.join(self.getTimestamp()) + "binaryotsu.tiff",
+                   output)
+        print(''.join(self.getTimestamp()) + ' is done')
+
+    def do_multi_otsu(self):
+        # First look at images
+        self.getTimestamp()
+        inputIm = io.imread(self.path, as_gray=True)
+        threshold = threshold_multiotsu(inputIm, 2, 256)
+        regions = np.digitize(inputIm, bins=np.array(threshold))
+        outputname = '/mnt/DD/Bonds_Project/Aurea_Project/Input/S1B/' + ''.join(self.timestamp) + '_otsu_thresh.tiff'
+        # output = img_as_ubyte(regions)
+        io.imsave(outputname, regions.astype(np.uint8))
+        # io.imsave(outputname, output)
+        print(''.join(self.getTimestamp()) + ' is done')
+
+    def do_binarize(self):
+        input_array = io.imread(self.path)
+
+
+def imageSearch(folder):
+    for images in glob.glob(folder + "*.tif"):
+        images_list.append(images)
+    print("listes d'images: " + str(images_list))
+    return images_list
+
+
+def run(input_dir=''):
+    # We want to have 2 lists in order to create Image objects using path values ,
+    arraylist = []
+    res = []
+    if input_dir:
+        folder = input_dir
+    else:
+        folder = "/mnt/DD/Bonds_Project/Aurea_Project/Input/S1A/"
+    imageSearch(folder)  # The goal here is to fetch a list of path and give it to our variable object
+    for path in images_list:
+        # a list  named arraylist will be created and will get line of path for each image into the path attribute
+        arraylist.append(Image(path))
+    # Setting attributes for the multiple object we are going to otsu thresh
+    for objet in arraylist:
+        objet.readImage(objet.getPath())
+        objet.determineTimeStamp()
+        print(objet.getPath())
+        res.append(objet)
+    # doing the multi otsu thresholding
+    for array in res:
+        print('Doing this one : ' + ''.join(array.getTimestamp()))
+        array.do_multi_otsu()
+
+
+def imageSearch(folder, extension):
+    # images_list = []
+    for images in glob.glob(folder + '/*.' + extension):
+        images_list.append(images)
+    print("listes d'images: " + str(images_list))
+    return images_list
+
+
+def createS1Imglist(inputfolder='', extension='zip'):
+    s1list.clear()
+    if inputfolder:
+        folder = inputfolder
+    else:
+        folder = "/mnt/DD/Bonds_Project/Aurea_Project/Input/S1A/"
+    imageSearch(folder, extension)  # The goal here is to fetch a list of path and give it to our variable object
+    for path in images_list:
+        # a list  named s1list will be created and will get line of path for each image into the path attribute
+        s1list.append(Image(path))
+    return s1list, images_list
+
+
+def tableau(folder=''):
+    if not folder:
+        folder = "/mnt/DD/Bonds_Project/Aurea_Project/Input/S1A/"
+    print("folder is " + str(folder))
+    print("looking for images ")
+    imageslist = []
+    timestamp = []
+    for images in glob.glob(folder + '*.zip'):
+        imageslist.append(images)
+    for images in imageslist:
+        timestamp.append(images.split('_')[6:7])
