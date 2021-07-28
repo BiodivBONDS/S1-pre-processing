@@ -2,6 +2,7 @@ import glob
 import os
 import snappy
 import gc
+import shutil
 from snappy import ProductIO, GPF
 
 # from rsgislib.segmentation import segutils
@@ -24,7 +25,7 @@ class Image:
     def __init__(self, path):
         # Basic attributes
         self.path = path
-        #self.imgpath = ProductIO.readProduct(path)
+        # self.imgpath = ProductIO.readProduct(path)
         self.timestamp = path.split('_')[6:7]
         # Orbit file
         self.orbFile = ''
@@ -80,6 +81,17 @@ class Image:
             print('could not find attribute')
             pass
 
+    def deleteOnceDone(self):
+        try:
+            print('deleting stuff')
+            for things in os.listdir(input_dir):
+                if ''.join(self.timestamp) in things and things.endswith('.data') and 'orth' not in things:
+                    print(things + ' is going to the recycle bin')
+                    shutil.rmtree(things)
+        except OSError:
+            print('error deleting data folder')
+            pass
+
     def getTimestamp(self):
         return self.timestamp
 
@@ -120,7 +132,7 @@ class Image:
         """
         if self.orb:
             print('file already exists')
-        elif "orb_" + ''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+        elif "orb_" + ''.join(self.getTimestamp()) + '.dim' in os.listdir(input_dir):
             self.orbFile = input_dir + "orb_" + ''.join(self.getTimestamp())
             print('file has already been proccessed')
             pass
@@ -149,38 +161,47 @@ class Image:
         if self.calib:
             print('file already exists')
             pass
-        elif 'VVcalib_'+''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
-            self.VVcalibFile = input_dir+'VVcalib_'+''.join(self.getTimestamp())
-            self.VHcalibFile = input_dir+'VHcalib_'+''.join(self.getTimestamp())
+        elif 'VVcalib_' + ''.join(self.getTimestamp()) + '.dim' in os.listdir(input_dir):
+            self.VVcalibFile = input_dir + 'VVcalib_' + ''.join(self.getTimestamp())
+            self.VHcalibFile = input_dir + 'VHcalib_' + ''.join(self.getTimestamp())
             print(' file has already been calibrated')
             pass
         else:
             # initialisation des parametres
             parameters = HashMap()
             parameters.put('outputSigmaBand', True)
-            parameters.put('outputBetaBand', True)
-            parameters.put('outputGammaBand', True)
+            parameters.put('outputBetaBand', False)
+            parameters.put('outputGammaBand', False)
             parameters.put("outputImageScaleInDb", False)
+            parametersVH = parameters
+            parameters.put('Polarisations', 'VV')
+            parametersVH.put('Polarisations', 'VH')
             self.VVcalibFile = input_dir + "VVcalib_" + ''.join(self.getTimestamp())
             self.VHcalibFile = input_dir + 'VHcalib_' + ''.join(self.getTimestamp())
             calib_param = snappy.GPF.createProduct("Calibration", parameters,
-                                                   ProductIO.readProduct(self.orbFile+'.dim'))
+                                                   ProductIO.readProduct(self.orbFile + '.dim'))
+            calib_paramVH = snappy.GPF.createProduct("Calibration", parametersVH,
+                                                     ProductIO.readProduct(self.orbFile + '.dim'))
+
             # ----Writing
             # ---VV
             ProductIO.writeProduct(calib_param, self.VVcalibFile, 'BEAM-DIMAP')
             print(str(self.VVcalibFile) + " is done")
             # ----VH
-            ProductIO.writeProduct(calib_param, self.VHcalibFile, 'BEAM-DIMAP')
+            ProductIO.writeProduct(calib_paramVH, self.VHcalibFile, 'BEAM-DIMAP')
             print(str(self.VHcalibFile) + " is done")
             self.calib = True
             # Deleting old stuff
-            if self.orb:
-                try:
-                    for things in input_dir + 'orb_' + ''.join(self.getTimestamp()) + '/data':
-                        os.remove(things)
-                    os.removedirs(input_dir + 'orb_' + ''.join(self.getTimestamp()) + '/data')
-                except OSError:
-                    pass
+            # print('trying to free disk space')
+            # if self.orb:
+            #     try:
+            #         for things in input_dir + 'orb_' + ''.join(self.getTimestamp()) + '.data/':
+            #             os.remove(things)
+            #         os.removedirs(input_dir + 'orb_' + ''.join(self.getTimestamp()) + '.data/')
+            #         print('orbfile has been removed')
+            #     except OSError:
+            #         print('nothing to delete')
+            #         pass
             return self.VVcalibFile, self.VHcalibFile, self.calib
 
     def applyTerrainCorrection(self):
@@ -190,19 +211,18 @@ class Image:
         # LEt us check if it exists
         if self.terr:
             print('file already exists')
-        elif 'VVcalib_' + ''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+        elif 'VVcalib_' + ''.join(self.getTimestamp()) + '.dim' in os.listdir(input_dir):
             print('file has already been calibrated adding to desc')
-            self.VVterrainFlatFile = input_dir + 'VVcalib_' + ''.join(self.getTimestamp())
-            self.VHterrainFlatFile = input_dir + 'VHcalib_' + ''.join(self.getTimestamp())
+            self.VVterrainFlatFile = input_dir + 'VVterr_' + ''.join(self.getTimestamp())
+            self.VHterrainFlatFile = input_dir + 'VHterr_' + ''.join(self.getTimestamp())
         else:
             # Output
-
+            print('applying terrain flattening operator')
             self.VVterrainFlatFile = input_dir + "VVterr_" + ''.join(self.getTimestamp())
             self.VHterrainFlatFile = input_dir + 'VHterr_' + ''.join(self.getTimestamp())
 
             # ---------Parameters-------
             parameters = HashMap()
-            # parameters.put('Source Bands', 'VV,VH')
             # parameters.put('demName', 'SRTM 3Sec')
             # dempath = '/mnt/DD/Bonds_Project/Hardi_Process/dem/srtm_26_13.zip'
             # parameters.put('mapProjection', proj)
@@ -212,6 +232,9 @@ class Image:
             parameters.put('demResamplingMethod', 'BILINEAR_INTERPOLATION')
             parameters.put('additionalOverlap', 0.1)
             parameters.put('OversamplingMultiple', 1.5)
+            parametersVH = parameters
+            parameters.put('sourceBands', 'Sigma0_VV')
+            parametersVH.put('sourceBands', 'Sigma0_VH')
 
             # ----------Reading --------
             # ----Creating the product
@@ -226,10 +249,10 @@ class Image:
             if VVcalibFile:  # We assume VH exists if VV exists , thus reading
                 # ------------Reading
                 VVterr_param = snappy.GPF.createProduct("Terrain-Flattening", parameters,
-                                                        ProductIO.readProduct(self.VVcalibFile+'.dim'))
+                                                        ProductIO.readProduct(self.VVcalibFile + '.dim'))
                 # --  VH  --
-                VHterr_param = snappy.GPF.createProduct("Terrain-Flattening", parameters,
-                                                        ProductIO.readProduct(self.VHcalibFile+'.dim'))
+                VHterr_param = snappy.GPF.createProduct("Terrain-Flattening", parametersVH,
+                                                        ProductIO.readProduct(self.VHcalibFile + '.dim'))
                 # ----- Writing----
                 ProductIO.writeProduct(VVterr_param, self.VVterrainFlatFile, 'BEAM-DIMAP')
                 print str(self.VVterrainFlatFile) + " is done "
@@ -252,7 +275,7 @@ class Image:
         if self.orth:
             print("file already exists")
 
-        elif 'VVorth_'+''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+        elif 'VVorth_' + ''.join(self.getTimestamp()) + '.dim' in os.listdir(input_dir):
             print('file has already been geo corrected adding to desc')
             self.VVorthoCorrFile = input_dir + "VVorth_" + ''.join(self.getTimestamp())
             self.VHorthoCorrFile = input_dir + 'VHorth_' + ''.join(self.getTimestamp())
@@ -271,16 +294,19 @@ class Image:
                 parameters = HashMap()
                 parameters.put('demResamplingMethod', 'BICUBIC_INTERPOLATION')
                 parameters.put('demName', 'SRTM 1Sec HGT')
+                parametersVH = parameters
+                parametersVH.put('sourceBands', 'Sigma0_VH')
+                parameters.put('sourceBands', 'Sigma0_VV')
                 # ------------Output----
                 self.VVorthoCorrFile = input_dir + "VVorth_" + ''.join(self.getTimestamp())
                 self.VHorthoCorrFile = input_dir + 'VHorth_' + ''.join(self.getTimestamp())
                 # --------Reading---------
                 # VH
                 VHorth_param = snappy.GPF.createProduct("Terrain-Correction", parameters,
-                                                        ProductIO.readProduct(self.VVterrainFlatFile+'.dim'))
+                                                        ProductIO.readProduct(self.VVcalibFile + '.dim'))
                 # VV
-                VVorth_param = snappy.GPF.createProduct("Terrain-Correction", parameters,
-                                                        ProductIO.readProduct(self.VHterrainFlatFile+'.dim'))
+                VVorth_param = snappy.GPF.createProduct("Terrain-Correction", parametersVH,
+                                                        ProductIO.readProduct(self.VHcalibFile + '.dim'))
                 # --------writing-------
                 # VV
                 ProductIO.writeProduct(VHorth_param, self.VHorthoCorrFile, 'BEAM-DIMAP')
@@ -305,7 +331,7 @@ class Image:
         # check if file has already been speckle filtered
         if self.speck:
             print("file already exists")
-        elif "VVspeck_" + ''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+        elif "VVspeck_" + ''.join(self.getTimestamp()) + '.dim' in os.listdir(input_dir):
             self.VVspeckFile = input_dir + "VVspeck_" + ''.join(self.getTimestamp())
             self.VHspeckFile = input_dir + "VHspeck_" + ''.join(self.getTimestamp())
             print('file has already been proccessed')
@@ -328,16 +354,19 @@ class Image:
                 parameters.put('windowSize', "5x5")
                 parameters.put('sigma', 0.9)
                 parameters.put('targetWindowSize', "5")
+                parametersVH = parameters
+                parameters.put('sourceBands', 'Sigma0_VV')
                 # ---------- Output----------
                 self.VVspeckFile = input_dir + "VVspeck_" + ''.join(self.getTimestamp())
                 self.VHspeckFile = input_dir + "VHspeck_" + ''.join(self.getTimestamp())
                 # ----------Reading-------
                 # VV
                 VVspeck_param = snappy.GPF.createProduct("Speckle-Filter", parameters,
-                                                         ProductIO.readProduct(VVInput+'.dim'))
+                                                         ProductIO.readProduct(VVInput + '.dim'))
                 # VH
-                VHspeck_param = snappy.GPF.createProduct("Speckle-Filter", parameters,
-                                                         ProductIO.readProduct(VHInput+'.dim'))
+                parametersVH.put('sourceBands', 'Sigma0_VH')
+                VHspeck_param = snappy.GPF.createProduct("Speckle-Filter", parametersVH,
+                                                         ProductIO.readProduct(VHInput + '.dim'))
                 # ------- Writing--------
                 # VV
                 print(" Using speckefiltering on " + str(self.VVspeckFile))
@@ -358,7 +387,7 @@ class Image:
         if self.dB:
             # check if file has already been speckle filtered
             print("file already exists")
-        elif "VVdB_" + ''.join(self.getTimestamp())+'.dim' in os.listdir(input_dir):
+        elif "VVdB_" + ''.join(self.getTimestamp()) + '.dim' in os.listdir(input_dir):
             self.VVdBFile = input_dir + "VVdB_" + ''.join(self.getTimestamp())
             self.VHdBFile = input_dir + "VHdB_" + ''.join(self.getTimestamp())
             print('file has already been proccessed')
@@ -373,17 +402,21 @@ class Image:
                 print ("converting Linear to decibel for " + ''.join(self.getTimestamp()))
                 # -------Output
                 # VV , we can insert a try statement here to safe proof the run in case of an unlikely error
-                self.VVdBFile = input_dir + "VVdB" + ''.join(self.getTimestamp())
+                self.VVdBFile = input_dir + "VVdB_" + ''.join(self.getTimestamp())
                 # VH
-                self.VHdBFile = input_dir + "VHdB" + ''.join(self.getTimestamp())
+                self.VHdBFile = input_dir + "VHdB_" + ''.join(self.getTimestamp())
                 # initialisation des parametres
                 parameters = HashMap()
+                parametersVH = parameters
+                parameters.put('sourceBands', 'Sigma0_VV')
+                parametersVH.put('sourceBands', 'Sigma0_VH')
                 # Reading
                 VVdb_param = snappy.GPF.createProduct("LinearToFromdB", parameters,
                                                       ProductIO.readProduct(self.VVorthoCorrFile + '.dim'))
-                VHdb_param = snappy.GPF.createProduct("LinearToFromdB", parameters,
+                VHdb_param = snappy.GPF.createProduct("LinearToFromdB", parametersVH,
                                                       ProductIO.readProduct(self.VHorthoCorrFile + '.dim'))
-                # Writing
+                # Writing , Nique sa grand mere la pute geotiff de mes couilles
+
                 ProductIO.writeProduct(VVdb_param, self.VVdBFile, 'GeoTIFF-BigTIFF')
                 print str(self.VVdBFile) + "is done"
                 ProductIO.writeProduct(VHdb_param, self.VHdBFile, 'GeoTIFF-BigTIFF')
@@ -449,7 +482,7 @@ class Image:
 def imageSearch(folder, extension):
     for images in os.listdir(folder):
         if images.endswith(extension):
-            images_list.append(folder+images)
+            images_list.append(folder + images)
     print("listes d'images: " + str(images_list))
     return images_list
 
@@ -493,6 +526,81 @@ def createS1Imglist(inputfolder='', extension='zip'):
 #                 if time.startswith(correction):
 #                     self.
 
+def demCoregistration():
+    print('doing dem coregistration')
+    nom_image_list = []
+    nom_image_list2 = []
+    stack = []
+    stack2 = []
+    for img in glob.glob(input_dir + '/VVorth*'):
+        print(str(img))
+        if '.dim' in img:
+            nom_image_list.append(img)
+    for imgVH in glob.glob(input_dir + '/VHorth*'):
+        print(str(imgVH))
+        if '.dim' in imgVH:
+            nom_image_list2.append(imgVH)
+    print(str(nom_image_list))
+    print(str(nom_image_list2))
+    print str(stack)
+    # on cree l'objet product permettant de faire la coregistration
+    for f in nom_image_list:
+        stack.append(ProductIO.readProduct(f))
+    for g in nom_image_list2:
+        stack2.append(ProductIO.readProduct(g))
+    # initialisation des parametres
+    parameters = HashMap()
+    parameters.put('demName', 'SRTM 1Sec HGT')
+    parameters.put('demResamplingMethod', 'BICUBIC_INTERPOLATION')
+    parameters.put('ResamplingType', 'BICUBIC_INTERPOLATION')
+    parametersVH = parameters
+    parameters.put('sourceBands', 'Sigma0_VV')
+    parametersVH.put('sourceBands', 'Sigma0_VH')
+    # on cree la sortie
+    outfile = input_dir + '/coregistrationVV'
+    outfile2 = input_dir + '/coregistrationVH'
+    print "destination folder is " + str(outfile)
+    param = snappy.GPF.createProduct("DEM-Assisted-Coregistration", parameters, stack)
+    ProductIO.writeProduct(param, outfile, 'BEAM-DIMAP')
+    print('doing VH ')
+    param2 = snappy.GPF.createProduct("DEM-Assisted-Coregistration", parametersVH, stack2)
+    ProductIO.writeProduct(param2, outfile2, 'BEAM-DIMAP')
+
+
+def stackaveraging(s=input_dir + '/coregistrationVV.dim', s2=input_dir + '/coregistrationVH.dim'):
+    # On cree une fonction permettant de calculer la moyenne de l'ensemble des bandes d'un stack par pixels
+    print 'stack averaging'
+    # initialisation des parametres
+    parameters = HashMap()
+    parameters.put('Statistic', 'Mean Average')
+    parametersVH = parameters
+    parameters.put('sourceBands', 'Sigma0_VV')
+    parametersVH.put('sourceBands', 'Sigma0_VH')
+    stack = ProductIO.readProduct(s)
+    stack2 = ProductIO.readProduct(s2)
+    # creation of the output
+    output = input_dir + '/meanraster/meanraster.dim'
+    output2 = input_dir + '/meanraster/meanrasterVH.dim'
+    createmeanraster = snappy.GPF.createProduct("Stack-Averaging", parameters, stack)
+    andVH = snappy.GPF.createProduct("Stack-Averaging", parametersVH, stack2)
+    print('first VV')
+    ProductIO.writeProduct(createmeanraster, output, 'BEAM-DIMAP')
+    print('Then VH ')
+    ProductIO.writeProduct(andVH, output2, 'BEAM-DIMAP')
+    # Converting ASAP to DB
+    print 'converting to dB'
+    parameters2 = HashMap()
+    parameters2.put('sourceBands', 'Sigma0_VV')
+    parameters2VH = HashMap()
+    parameters2VH.put('sourceBands','Sigma0_VH') # VV ou VH
+    db_param = snappy.GPF.createProduct("LinearToFromdB", parameters2,
+                                        ProductIO.readProduct(output))
+    ProductIO.writeProduct(db_param, input_dir + '/meanraster/db_meanrasterVV.tif', 'GeoTIFF-BigTIFF')
+    print('dbmeanraster VV is done ')
+    print('now doing VH ')
+    db_paramVH = snappy.GPF.createProduct("LinearToFromdB", parameters2, ProductIO.readProduct(output2))
+    ProductIO.writeProduct(db_paramVH, input_dir + '/meanraster/db_meanrasterVH.tif', 'GeoTIFF-BigTIFF')
+
 
 def run(inputfolder=''):
     if inputfolder:
@@ -514,24 +622,26 @@ def run(inputfolder=''):
     for s1img in s1list:
         if isinstance(s1img, Image):
             # Check if it is an object image
-            s1img.applyOrbit()
-            s1img.applyCalibration()
-            s1img.applySpeckleFilter('VVcalibFile', 'VHcalibFile')
-            s1img.applyTerrainCorrection()
-            s1img.applyOrthorectification()
+            #s1img.applyOrbit()
+            #s1img.applyCalibration()
+            #s1img.applySpeckleFilter('VVcalibFile', 'VHcalibFile')
+            #s1img.applyTerrainCorrection()
+            #s1img.applyOrthorectification()
             s1img.convertToDecibel()
+            #s1img.deleteOnceDone()
     print('preprocess is done ')
     print('starting Step 2 , CoRegistration')
     stackVV = []
     stackVH = []
     # We are looking for image to stack, and we need those which are not stacked
-    for s1img in s1list:
-        if not s1img.stack:
-            stackVV.append(ProductIO.readProduct(getattr(s1img, 'VVorthoCorrFile')))
-            stackVH.append(ProductIO.readProduct(getattr(s1img, 'VHorthoCorrFile')))
-            s1img.stack = True
-    createstack('VV', stackVV)
-    createstack('VH', stackVH)
+    #for s1img in s1list:
+    #   if not s1img.stack:
+    #       stackVV.append(ProductIO.readProduct(getattr(s1img, 'VVorthoCorrFile')))
+    #      stackVH.append(ProductIO.readProduct(getattr(s1img, 'VHorthoCorrFile')))
+    #      s1img.stack = True
+    #demCoregistration()
+    # createstack('VV', stackVV)
+    # createstack('VH', stackVH)
 
 # def main():
 #     # loop to fetch all zip in folder for preprocessing
