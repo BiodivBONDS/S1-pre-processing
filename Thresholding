@@ -1,16 +1,13 @@
 import glob
-import os
-import sys
-import time
-import gdal
-import cv2
 import scipy
 import scikitplot
 import matplotlib
 import numpy as np
 import skimage
+import imagecodecs
 from matplotlib import pyplot as plt
 from skimage import data
+from skimage import io as io
 from skimage.filters import threshold_multiotsu, threshold_otsu, threshold_yen
 from skimage import io
 from skimage import viewer
@@ -18,6 +15,7 @@ from skimage import color
 from skimage import img_as_ubyte
 from skimage import img_as_float64
 from skimage import img_as_uint
+from skimage import img_as_int
 
 # input_dir = "/mnt/DD/Bonds_Project/Aurea_Project/Input/S1A/"
 images_list = []
@@ -35,7 +33,7 @@ class Image:
         # timestamp is for managing chronogically files
         self.path = path
         # self.array = io.imread(self.path)
-        self.timestamp = path.split('_')[-1:]
+        self.timestamp = path.split('_')[-2:-1]
         intermediatevalue = ''.join(self.timestamp)
         self.timestamp = intermediatevalue.split('.')[:1]
 
@@ -65,8 +63,16 @@ class Image:
 
     def determineTimeStamp(self):
         if not self.timestamp:
-            self.timestamp = self.path.split('_')[6:7]
+            intermediate_timestamp = self.path.split('dB')[-1:]
+            self.timestamp = ''.join(intermediate_timestamp).split('.')[:1]
+            print(self.timestamp)
+        elif not (len(self.timestamp) == 15):
+            print('correcting values for time stamp')
+            intermediate_timestamp = self.path.split('dB')[-1:]
+            self.timestamp = ''.join(intermediate_timestamp).split('.')[:1]
+            print(self.timestamp)
         else:
+            print('time stamp already set')
             pass
 
     def getPath(self):
@@ -86,28 +92,67 @@ class Image:
         threshold = threshold_otsu(inputIm, 256)
         binary = inputIm < threshold
         regions = np.digitize(binary, bins=int(threshold))
-        output = img_as_ubyte(regions)
+        output = img_as_float64(regions)
         plt.imsave('/mnt/DD/Bonds_Project/Aurea_Project/Input/' + ''.join(self.getTimestamp()) + "binaryotsu.tiff",
                    output)
         print(''.join(self.getTimestamp()) + ' is done')
 
     def do_multi_otsu(self):
         # First look at images
-        self.getTimestamp()
-        inputIm = io.imread(self.path, as_gray=True)
-        threshold = threshold_multiotsu(inputIm, 2, 256)
-        regions = np.digitize(inputIm, bins=np.array(threshold))
+        # inputIm = rgb2gray(io.imread(self.path, plugin='gdal'))
+        print('image has been read, determining thresholds')
+        threshold = threshold_multiotsu(io.imread(self.path, as_gray=True), 3, 256)
+        print('threshold is multi otsu ' + str(threshold))
+        regions = np.digitize(io.imread(self.path), bins=threshold)
+        print('image has been digitized')
         outputname = '/mnt/DD/Bonds_Project/Aurea_Project/Input/S1B/' + ''.join(self.timestamp) + '_otsu_thresh.tiff'
-        # output = img_as_ubyte(regions)
-        io.imsave(outputname, regions.astype(np.uint8))
+        print('outputname: ' + outputname)
+        output = img_as_int(regions)
+        io.imsave(outputname, output)
         # io.imsave(outputname, output)
         print(''.join(self.getTimestamp()) + ' is done')
 
     def do_binarize(self):
         input_array = io.imread(self.path)
 
+def multiotsu(image, classe=3, nbins=256):
+    print('reading image')
+    img = io.imread(image,as_gray=True)
+    print('image is ready')
+    print('doing thresholding')
+    # img[img==0]=[np.nan]
+    # img = img[np.logical_not(np.isnan(img))]
+    threshold = threshold_multiotsu(img, classe, nbins)
+    print('number of class ' + str(classe) + '  number of bins ' + str(nbins) + ' ' + str(threshold))
+    regions = np.digitize(img, bins=threshold)
+    output = img_as_int(regions)
+    #plt.imsave('/mnt/DD/Bonds_Project/Aurea_Project/Input/multiotsu6.tiff', output)
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(10, 3.5))
+    ax[0].imshow(img, cmap='gray')
+    ax[0].set_title('Original')
+    ax[0].axis('off')
 
-def imageSearch(folder):
+    # Plotting the histogram and the two thresholds obtained from
+    # multi-Otsu.
+    print('ploting the histogram')
+    ax[1].hist(img.ravel(), bins=256)
+    ax[1].set_title('Histogram')
+    for thresh in threshold:
+        ax[1].axvline(thresh, color='r')
+
+    # Plotting the Multi Otsu result.i
+    print('ploting the multi otsu result')
+    ax[2].imshow(regions, cmap='Accent')
+    ax[2].set_title('Multi-Otsu result')
+    ax[2].axis('off')
+    # viewer = skimage.viewer.ImageViewer(regions)
+    # viewer.show()
+    plt.subplots_adjust()
+    plt.show()
+    print('saving image')
+    plt.imsave('/home/marielouise/Images/MapOtsu.tiff', output)
+
+def imageSearchtif(folder):
     for images in glob.glob(folder + "*.tif"):
         images_list.append(images)
     print("listes d'images: " + str(images_list))
@@ -121,14 +166,14 @@ def run(input_dir=''):
     if input_dir:
         folder = input_dir
     else:
-        folder = "/mnt/DD/Bonds_Project/Aurea_Project/Input/S1A/"
-    imageSearch(folder)  # The goal here is to fetch a list of path and give it to our variable object
+        folder = "/mnt/DD/Bonds_Project/Aurea_Project/Input/2017A/"
+    imageSearch(folder, extension='tif')  # The goal here is to fetch a list of path and give it to our variable object
     for path in images_list:
         # a list  named arraylist will be created and will get line of path for each image into the path attribute
         arraylist.append(Image(path))
     # Setting attributes for the multiple object we are going to otsu thresh
     for objet in arraylist:
-        objet.readImage(objet.getPath())
+        # objet.readImage(objet.getPath())
         objet.determineTimeStamp()
         print(objet.getPath())
         res.append(objet)
