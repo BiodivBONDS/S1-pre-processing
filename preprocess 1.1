@@ -1,0 +1,517 @@
+import os
+import datetime
+import glob
+import gc
+import snappy
+from snappy import ProductIO, GPF
+
+
+
+# class PreProcess:
+# Get snappy Operators
+snappy.GPF.getDefaultInstance().getOperatorSpiRegistry().loadOperatorSpis()
+# HashMap Key-Value pairs
+HashMap = snappy.jpy.get_type('java.util.HashMap')
+gc.enable()
+# Working directory
+input_dir = "/mnt/DD/Bonds_Project/Aurea_Project/Input/2017/"
+
+
+def __init__():
+    self = ''
+    stack = ''
+    sVV = ''
+    sVH = ''
+    return self, stack, sVV, sVH
+
+
+def rmvtemp(tempfile=''):
+    os.remove(tempfile)
+
+
+def applyOrbit(timestamp, sentinel_image, HashMap):
+    # first step to apply orbitfile
+    """
+    Input:  Amplitude_VH, Intesity_VH, Amplitude_VV, Intensity_VV
+    output: Amplitude_VH, Intesity_VH, Amplitude_VV, Intensity_VV
+    """
+    print "Now applying orbit"
+
+    if os.path.isfile(input_dir + "/orb_" + timestamp + ".dim"):
+        print "file already exists"
+    else:
+        orbFile = input_dir + "/orb_" + timestamp  # Nom ou chemin d'acces au fichier
+        # initialisation des parametres
+        parameters = HashMap()
+        # parameters.put("selectedPolarisations", "VH,VV")
+        # parameters.put("Source Bands", "VH,VV")
+        orbit_param = snappy.GPF.createProduct("Apply-Orbit-File", parameters, sentinel_image)  # on veut creer l'objet
+        # Product IO.writeProduct( operator(opname,parameters ArrayList, image input), outputname, output format)
+        ProductIO.writeProduct(orbit_param, orbFile,
+                               'BEAM-DIMAP')  # pour ecrire l'objet on a besoin qu'il soit pas vide
+        print str(orbFile) + " is done "
+
+# def thermalnoise():
+#     print ' Removing thermal noise'
+#     parameters = HashMap()
+#     parameters.put('selectedPolarisations', 'VH,VV')
+
+
+def applyCalibration(timestamp, sentinel_image, HashMap):
+    """
+    Input:  Amplitude_VH, Intesity_VH, Amplitude_VV, Intensity_VV
+    output: beta0_VH, beta0_VV
+    """
+    print "Now applying calibration"
+
+    if os.path.isfile(input_dir + "/calibVV_" + timestamp + ".dim"):
+        print "file already exists"
+    else:
+        # initialisation des parametres
+        parameters = HashMap()
+        parameters.put('outputSigmaBand', True)
+        parameters.put('outputBetaBand', True)
+        parameters.put('outputGammaBand', True)
+        parameters.put("selectedPolarisations", "VV")
+        # parameters.put("sourceBands", "Intensity_VV")
+        parameters.put("outputImageScaleInDb", False)
+        calibFile = input_dir + "/calibVV_" + timestamp
+        input = input_dir + "/orb_" + timestamp + ".dim"
+        calib_param = snappy.GPF.createProduct("Calibration", parameters,
+                                               ProductIO.readProduct(input))
+        ProductIO.writeProduct(calib_param, calibFile, 'BEAM-DIMAP')
+        print str(calibFile) + " is done"
+
+
+def applyCalibration2(timestamp, sentinel_image, HashMap):
+    """
+    Input:  Amplitude_VH, Intesity_VH, Amplitude_VV, Intensity_VV
+    output: beta0_VH, beta0_VV
+    """
+    print "Now applying calibration"
+
+    if os.path.isfile(input_dir + "/calibVH_" + timestamp + ".dim"):
+        print "file already exists"
+    else:
+        # initialisation des parametres
+        parameters = HashMap()
+        parameters.put('outputSigmaBand', True)
+        parameters.put('outputBetaBand', True)
+        parameters.put('outputGammaBand', True)
+        parameters.put("selectedPolarisations", "VH")
+        # parameters.put("sourceBands", "Intensity_VV")
+        parameters.put("outputImageScaleInDb", False)
+        calibFile = input_dir + "/calibVH_" + timestamp
+        calib_param = snappy.GPF.createProduct("Calibration", parameters,
+                                               ProductIO.readProduct(input_dir + "/orb_" + timestamp + ".dim"))
+        ProductIO.writeProduct(calib_param, calibFile, 'BEAM-DIMAP')
+        print str(calibFile) + " is done"
+        # os.removedirs(input_dir+"/orb_"+timestamp+".data/")
+
+
+def applyMultilook(timestamp, HashMap):
+    """
+    Input:  beta0_VH, beta0_VV
+    output: beta0_VH, beta0_VV
+    """
+    print "Now applying mulilook"
+
+    if os.path.isfile(input_dir + "/multi_" + timestamp + ".dim"):
+        print "file already exist"
+
+    else:
+        # initialisation des parametres
+        azLooks = 3
+        rgLooks = 3
+        parameters = HashMap()
+        multiFile = input_dir + "/multi_" + timestamp
+        parameters.put('grSquarePixel', True)
+        parameters.put('nRgLooks', rgLooks)
+        parameters.put('nAzLooks', azLooks)
+        parameters.put('outputIntensity', False)
+        # parameters.put('Source Bands', 'VV,VH')
+        multi_param = snappy.GPF.createProduct("Multilook", parameters,
+                                               ProductIO.readProduct(input_dir + "/calib_" + timestamp + ".dim"))
+        ProductIO.writeProduct(multi_param, multiFile, 'BEAM-DIMAP')
+        print str(multiFile) + " is done "
+
+
+def applyTerrainCorrection(timestamp, HashMap):
+    """
+    Input:  beta0_VH, beta0_VV
+    output: gamma0_VH, gamma0_VV
+    """
+    print "Now applying terrain correction"
+
+    if os.path.isfile(input_dir + "/VVterr_" + timestamp):
+        print "file already exists"
+
+    else:
+        # initialisation des parametres
+        parameters = HashMap()
+        terrFile = input_dir + "/VVterr_" + timestamp
+        parameters.put('Source Bands', 'VV')
+        parameters.put('demResamplingMethod', 'BICUBIC_INTERPOLATION')
+        parameters.put('demName', 'SRTM 1Sec HGT')
+
+        terr_param = snappy.GPF.createProduct("Terrain-Flattening", parameters,
+                                              ProductIO.readProduct(input_dir + "/calibVV_" + timestamp))
+        ProductIO.writeProduct(terr_param, terrFile, 'BEAM-DIMAP')
+        print str(terrFile) + " is done "
+
+
+def applyTerrainCorrection2(timestamp, HashMap):
+    """
+    Input:  beta0_VH, beta0_VV
+    output: gamma0_VH, gamma0_VV
+    """
+    print "Now applying terrain correction"
+
+    if os.path.isfile(input_dir + "/VHterr_" + timestamp):
+        print "file already exists"
+
+    else:
+        # initialisation des parametres
+        parameters = HashMap()
+        terrFile = input_dir + "/VHterr_" + timestamp
+        parameters.put('Source Bands', 'VH')
+        parameters.put('demResamplingMethod', 'BICUBIC_INTERPOLATION')
+        parameters.put('demName', 'SRTM 1Sec HGT')
+
+        terr_param = snappy.GPF.createProduct("Terrain-Flattening", parameters,
+                                              ProductIO.readProduct(input_dir + "/calibVH_" + timestamp))
+        ProductIO.writeProduct(terr_param, terrFile, 'BEAM-DIMAP')
+        print str(terrFile) + " is done "
+
+
+def applyOrthorectification(timestamp, HashMap):
+    """
+    Input:  gamma0_VH, gamma0_VV
+    output: gamma0_VH, gamma0_VV
+    """
+    print "Now applying Orthorectification"
+
+    if os.path.isfile(input_dir + "/orth_" + timestamp + ".dim"):
+        print "file already exists"
+
+    else:
+        # initialisation des parametres
+        parameters = HashMap()
+        # parameters.put('Source Bands', 'gamma0_VV,VH')
+        orth_file = input_dir + "/orth_" + timestamp
+
+        orth_param = snappy.GPF.createProduct("Ellipsoid-Correction-GG", parameters,
+                                              ProductIO.readProduct(input_dir + "/terr_" + timestamp + ".dim"))
+        ProductIO.writeProduct(orth_param, orth_file, 'BEAM-DIMAP')
+        print str(orth_file) + " is done "
+
+
+# fonction qui permet de retirer le speckle d'une image radar
+def applySpeckleFilter(timestamp, HashMap):
+    """
+    Input:  gamma0_VH, gamma0_VV
+    output: gamma0_VH, gamma0_VV
+    """
+    print "Now applying speckle filtering on VV"
+
+    if os.path.isfile(input_dir + "/speckVV_" + timestamp + ".dim"):
+        print "file already exists"
+
+    else:
+        # initialisation des parametres
+        parameters = HashMap()
+        speck_file = input_dir + "/speckVV_" + timestamp
+        parameters.put('sourceBands', 'Gamma0_VV')
+        parameters.put('filter', 'Refined Lee')
+        # parameters.put('numberofLooks', 4)
+        parameters.put('windowSize', "5x5")
+        parameters.put('sigma', 0.5)
+        parameters.put('targetWindowSize', "5")
+        print " Using speckefiltering on " + str(speck_file)
+        # creation de loutput
+        speck_param = snappy.GPF.createProduct("Speckle-Filter", parameters,
+                                               ProductIO.readProduct(input_dir + "/calibVV_" + timestamp + ".dim"))
+        ProductIO.writeProduct(speck_param, speck_file, 'BEAM-DIMAP')
+        print str(speck_file) + "is done"
+        return speck_file
+
+
+def applySpeckleFilter2(timestamp, HashMap):
+    """
+    Input:  gamma0_VH, gamma0_VV
+    output: gamma0_VH, gamma0_VV
+    """
+    print "Now applying speckle filtering on VH"
+
+    if os.path.isfile(input_dir + "/speckVH_" + timestamp + ".dim"):
+        print "file already exists"
+
+    else:
+        # initialisation des parametres
+        parameters = HashMap()
+        speck_file = input_dir + "/speckVH_" + timestamp
+        parameters.put('sourceBands', 'Gamma0_VH')
+        parameters.put('filter', 'Lee Sigma')
+        # parameters.put('numberofLooks', 4)
+        parameters.put('windowSize', "5x5")
+        parameters.put('sigma', 0.5)
+        parameters.put('targetWindowSize', "5")
+        print " Using speckefiltering on " + input_dir + '/calibVH_' + timestamp
+        # creation de loutput
+        speck_param = snappy.GPF.createProduct("Speckle-Filter", parameters,
+                                               ProductIO.readProduct(input_dir + "/calibVH_" + timestamp + ".dim"))
+        ProductIO.writeProduct(speck_param, speck_file, 'BEAM-DIMAP')
+        print str(speck_file) + "is done"
+
+
+def applySARterrainCorrection():
+    inputstack = input_dir + 'meanraster/meanraster.dim'
+    parameters = HashMap()
+    parameters.put('demName', 'SRTM 3Sec')
+    parameters.put('pixelSpacingInMeter', 10.0)
+    # parameters.put('sourceBands', 'Sigma0_VV')
+    sTc = GPF.createProduct('Terrain-Correction', parameters, inputstack)
+    ProductIO.writeProduct(sTc, input_dir + '/Sar_Terrain_Correction/Sar_Terrain_correction', 'BEAM-DIMAP')
+
+
+# Fonction permettant de faire un stack de plusieurs images raster qui partagent la meme emprise spatiale
+def createstackVV():
+    if os.path.isfile(input_dir + "/stack*"):
+        print "file already exists"
+    else:
+        print "creating stack"
+        # initialisation des parametres
+        parameters = HashMap()  # initialise le dico pour les parametres
+        parameters.put('extent', 'Master')
+        parameters.put('initialOffsetMethod', 'Product Geolocation')
+        parameters.put('ResamplingType', 'None')
+        parameters.put('FindOptimalMaster', 'True')
+        # recherche des images pour le stack
+        im_stack = []
+        print "looking for images to stack"
+        # on recupere que les images ortho rectifiees
+        for image in glob.glob(input_dir + '/VVterr*.dim'):
+            im_stack.append(image)
+        stack = []
+        for f in im_stack:
+            stack.append(ProductIO.readProduct(f))
+        create_stack = GPF.createProduct("CreateStack", parameters, stack)
+        output = input_dir + '/stackVV'
+        ProductIO.writeProduct(create_stack, output, 'BEAM-DIMAP')
+
+
+def createstackVH():
+    if os.path.isfile(input_dir + "/stackVH*"):
+        print "file already exists"
+    else:
+        print "creating stack"
+        # initialisation des parametreds
+        parameters = HashMap()  # initialise le dico pour les parametres
+        parameters.put('extent', 'Master')
+        parameters.put('initialOffsetMethod', 'Product Geolocation')
+        parameters.put('ResamplingType', 'None')
+        parameters.put('FindOptimalMaster', 'True')
+        # recherche des images pour le stack
+        im_stack = []
+        print "looking for images to stack"
+        # on recupere que les images ortho rectifiees
+        for image in glob.glob(input_dir + '/VHterr*.dim'):
+            im_stack.append(image)
+        stack = []
+        for f in im_stack:
+            stack.append(ProductIO.readProduct(f))
+        create_stack = GPF.createProduct("CreateStack", parameters, stack)
+        output = input_dir + '/stackVH'
+        ProductIO.writeProduct(create_stack, output, 'BEAM-DIMAP')
+        parameters2 = HashMap
+        parameters2.put('Statistic,Mean Average')
+        parameters3 = HashMap
+        parameters3.put('sourceBands', 'VV')
+        s = ProductIO.readProduct(input_dir + output + '.dim')
+        meanVH = snappy.GPF.createProduct("Stack-Averaging", parameters2, s)
+        dbVH = snappy.GPF.createProduct("LinearToFromdB", parameters3, meanVH)
+        snappy.GPF.writeProduct(dbVH, input_dir + '/dbVH.tif', 'GeoTIFF')
+
+
+def stackaveraging(s=input_dir + '/coregistrationVV.dim', s2=input_dir + '/coregistrationVH.dim'):
+    # On cree une fonction permettant de calculer la moyenne de l'ensemble des bandes d'un stack par pixels
+    print 'stack averaging'
+    # initialisation des parametres
+    parameters = HashMap()
+    parameters.put('Statistic', 'Mean Average')
+    stack = ProductIO.readProduct(s)
+    stack2 = ProductIO.readProduct(s2)
+    # creation of the output
+    output = input_dir + '/meanraster/meanraster.dim'
+    output2 = input_dir + '/meanraster/meanrasterVH.dim'
+    createmeanraster = snappy.GPF.createProduct("Stack-Averaging", parameters, stack)
+    andVH = snappy.GPF.createProduct("Stack-Averaging", parameters, stack2)
+    print('first VV')
+    ProductIO.writeProduct(createmeanraster, output, 'BEAM-DIMAP')
+    print('Then VH ')
+    ProductIO.writeProduct(andVH, output2, 'BEAM-DIMAP')
+    # Converting ASAP to DB
+    print 'converting to dB'
+    parameters2 = HashMap()
+    # parameters2.put('sourceBands', 'VV')  # VV ou VH
+    db_param = snappy.GPF.createProduct("LinearToFromdB", parameters2,
+                                        ProductIO.readProduct(output))
+    ProductIO.writeProduct(db_param, input_dir + '/meanraster/db_meanrasterVV.tif', 'GeoTIFF')
+    print('dbmeanraster VV is done ')
+    print('now doing VH ')
+    db_paramVH = snappy.GPF.createProduct("LinearToFromdB", parameters2, ProductIO.readProduct(output2))
+    ProductIO.writeProduct(db_paramVH, input_dir + '/meanraster/db_meanrasterVH.tif', 'GeoTIFF')
+
+
+# Superposition des images selon une image master
+def demCoregistration():
+    print('doing dem coregistration')
+    nom_image_list = []
+    nom_image_list2 = []
+    stack = []
+    stack2 = []
+    for img in glob.glob(input_dir + '/VVterr*'):
+        print(str(img))
+        if '.dim' in img:
+            nom_image_list.append(img)
+    for imgVH in glob.glob(input_dir + '/VHterr*'):
+        print(str(imgVH))
+        if '.dim' in imgVH:
+            nom_image_list2.append(imgVH)
+    print(str(nom_image_list))
+    print(str(nom_image_list2))
+    print str(stack)
+    # on cree l'objet product permettant de faire la coregistration
+    for f in nom_image_list:
+        stack.append(ProductIO.readProduct(f))
+    for g in nom_image_list2:
+        stack2.append(ProductIO.readProduct(g))
+    # initialisation des parametres
+    parameters = HashMap()
+    parameters.put('demName', 'GETASSE30')
+    parameters.put('demResamplingMethod', 'BICUBIC_INTERPOLATION')
+    parameters.put('ResamplingType', 'BICUBIC_INTERPOLATION')
+    # on cree la sortie
+    outfile = input_dir + '/coregistrationVV'
+    outfile2 = input_dir + '/coregistrationVH'
+    print "destination folder is " + str(outfile)
+    param = snappy.GPF.createProduct("DEM-Assisted-Coregistration", parameters, stack)
+    ProductIO.writeProduct(param, outfile, 'BEAM-DIMAP')
+    print('doing VH ')
+    param2 = snappy.GPF.createProduct("DEM-Assisted-Coregistration", parameters, stack2)
+    ProductIO.writeProduct(param2, outfile2, 'BEAM-DIMAP')
+
+
+def convertToDecibel(timestamp, HashMap):
+    if input_dir + "/dbVV_" + timestamp:
+        print('file already exists')
+    else:
+        for file in glob.glob(input_dir+'*.tiff'):
+            if file.endswith('.tif'):
+                if 'VVorth' in file:
+                    infileVv=
+                # Le but ici est de convertir chaque image du dossier en decibel
+                print ("converting Linear to decibel for VV band " + timestamp)
+                infileVV = input_dir + "/VVorth_" + timestamp + '*'
+                infileVH = input_dir + "/VHorth_" + timestamp + '*'
+                output = input_dir + "/dbVV_" + timestamp
+                outputVH= input_dir+ 'dbVH_'+ timestamp
+                # initialisation des parametres
+                parameters = HashMap()
+                parametersVH=HashMap()
+                parameters.put('sourceBands', 'Sigma0_VV')  # VV ou VH
+                parametersVH.put('sourceBands', 'Sigma0_VH')
+                db_paramVH = snappy.GPF.createProduct("LinearToFromdB",parametersVH,ProductIO.readProduct(infileVV))
+                db_param = snappy.GPF.createProduct("LinearToFromdB", parameters,
+                                                    ProductIO.readProduct(infileVH))
+                ProductIO.writeProduct(db_param, output, 'GeoTIFF-BigTIFF')
+                print(str(output) + ' is done')
+                ProductIO.writeProduct(db_paramVH,outputVH, 'GeoTIFF-BigTIFF')
+                print (str(outputVH) + " is done")
+
+
+def convertToDecibel2(timestamp, HashMap):
+    if input_dir + "/dbVH_" + timestamp:
+        print('file already exists')
+    else:
+        # Le but ici est de convertir chaque image du dossier en decibel
+        print ("converting Linear to decibel for VH band " + timestamp)
+        infile = input_dir + "/VHterr_" + timestamp
+        output = input_dir + "/dbVH" + timestamp
+        # initialisation des parametres
+        parameters = HashMap()
+        # parameters.put('sourceBands', 'Gamma0_VV')  # VV ou VH
+        db_param = snappy.GPF.createProduct("LinearToFromdB", parameters,
+                                            ProductIO.readProduct(infile))
+        ProductIO.writeProduct(db_param, output, 'GeoTIFF')
+        print (str(output) + " is done")
+
+
+# --------------------- main : create a loop in order to fetch all zip in folder-------------------------
+def step1():
+    print('--------Step 1---------- Preprocessing multiple Sentinel 1 images')
+    # loop to fetch all zip in folder for preprocessing
+    for folder in glob.glob(input_dir + "/*.zip"):
+        if folder.endswith(".zip"):
+            timestamp = folder.split("_")[6]
+            sentinel_image = ProductIO.readProduct(folder)
+            print str(timestamp) + " is being processed"
+            applyOrbit(timestamp, sentinel_image, HashMap)
+            applyCalibration(timestamp, sentinel_image, HashMap)
+            applyCalibration2(timestamp, sentinel_image, HashMap)
+            applySpeckleFilter(timestamp, HashMap)
+            applySpeckleFilter2(timestamp, HashMap)
+            # applyMultilook(timestamp, HashMap)
+            # applyOrthorectification(timestamp, HashMap)
+            # convertToDecibel(timestamp, HashMap)
+
+
+# ------Coregistration Step2 Block A------------
+def step3():
+    print('----------Step3---------- Stacking images and computing mean Raster')
+    # loop to realise Aurea Step 2 processing Multi temporal filter
+    stack = ''
+    demCoregistration()
+    #createstackVV()
+    # createstackVH()
+    stackaveraging()
+
+
+def step2():
+    # --------- Coregistration Step 2 Block B VV and VH------
+
+    #-------Deleting useless stuff--------
+    # for f in glob.glob(input_dir+'/*orb*.data/*'):
+    #     os.remove(f)
+    # for d in glob.glob(input_dir+'/*orb*'):
+    #     if d.isdir():
+    #         os.rmdir(d)
+    # loop to realise Step 2 processing
+    print('---------Step 2------------- Processing single date temporal filter')
+    # loop to fetch images calibrated from esa snap soft
+    for calibimage in glob.glob(input_dir + '/*calib*.dim'):
+        print(str(calibimage))
+        timestamp = calibimage.split("_")[3]
+        sentinel_image = ProductIO.readProduct(calibimage)
+        print (str(timestamp) + " is being processed")
+        # aurea step 2 speckle filtering on single date image
+        # applySpeckleFilter(timestamp, sentinel_image, HashMap)
+        applyTerrainCorrection(timestamp, HashMap)
+        applyTerrainCorrection2(timestamp, HashMap)
+        convertToDecibel(timestamp, HashMap)
+        convertToDecibel2(timestamp, HashMap)
+
+
+def step4():
+    print('---------Step4--------- Threshold classification ')
+
+
+def main():
+    __init__()
+    step1()
+    step2()
+    step3()
+    # step4()
+
+
+main()
