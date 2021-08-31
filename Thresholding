@@ -3,6 +3,8 @@ import scipy
 import scikitplot
 import matplotlib
 import numpy as np
+import imageio
+import rasterio
 import skimage
 import imagecodecs
 from matplotlib import pyplot as plt
@@ -16,6 +18,7 @@ from skimage import img_as_ubyte
 from skimage import img_as_float64
 from skimage import img_as_uint
 from skimage import img_as_int
+
 
 # input_dir = "/mnt/DD/Bonds_Project/Aurea_Project/Input/S1A/"
 images_list = []
@@ -33,7 +36,7 @@ class Image:
         # timestamp is for managing chronogically files
         self.path = path
         # self.array = io.imread(self.path)
-        self.timestamp = path.split('_')[-2:-1]
+        self.timestamp = path.split('_')[6:7]
         intermediatevalue = ''.join(self.timestamp)
         self.timestamp = intermediatevalue.split('.')[:1]
 
@@ -88,32 +91,58 @@ class Image:
     def do_otsu(self):
         # Single otsu binary threshold
         self.getTimestamp()
-        inputIm = io.imread(self.path, as_gray=True)
-        threshold = threshold_otsu(inputIm, 256)
-        binary = inputIm < threshold
-        regions = np.digitize(binary, bins=int(threshold))
+        threshold = threshold_otsu(io.imread(self.path, as_gray=True), 256)
+        print('threshold is otsu ' + str(threshold))
+        regions = np.digitize(io.imread(self.path), bins=256)
         output = img_as_float64(regions)
-        plt.imsave('/mnt/DD/Bonds_Project/Aurea_Project/Input/' + ''.join(self.getTimestamp()) + "binaryotsu.tiff",
+        imageio.imwrite('/mnt/DD/Bonds_Project/Aurea_Project/Input/' + ''.join(self.getTimestamp()) + "binaryotsu.tiff",
                    output)
         print(''.join(self.getTimestamp()) + ' is done')
 
-    def do_multi_otsu(self):
+    # def do_multi_otsu(self,classe=3):
+    #     # First look at images
+    #     # inputIm = rgb2gray(io.imread(self.path, plugin='gdal'))
+    #     print('image has been read, determining thresholds')
+    #     threshold = threshold_multiotsu(io.imread(self.path, as_gray=True), classe, 256)
+    #     print('threshold is multi otsu ' + str(threshold))
+    #     regions = np.digitize(io.imread(self.path), bins=threshold)
+    #     print('image has been digitized')
+    #     outputname = '/mnt/DD/Bonds_Project/Aurea_Project/Input/S1B/' + ''.join(self.timestamp) + '_otsu_thresh.tiff'
+    #     print('outputname: ' + outputname)
+    #     output = img_as_uint(regions)
+    #     imageio.imwrite(outputname, output)
+    #     # io.imsave(outputname, output)
+    #     print(''.join(self.getTimestamp()) + ' is done')
+
+    def do_multi_otsu(self, classe=3):
         # First look at images
         # inputIm = rgb2gray(io.imread(self.path, plugin='gdal'))
+        # Use rasterio to keep georeferencing
+        # First read image
+        with rasterio.open(self.path) as src:
+            img = src.read()
+            profile = src.profile
+        # Determining thresholds using scikit and multi otsu
         print('image has been read, determining thresholds')
-        threshold = threshold_multiotsu(io.imread(self.path, as_gray=True), 3, 256)
+        threshold = threshold_multiotsu(img, classe, 256)
         print('threshold is multi otsu ' + str(threshold))
-        regions = np.digitize(io.imread(self.path), bins=threshold)
+        # Digitizing using numpy
+        regions = np.digitize(img, bins=threshold)
         print('image has been digitized')
-        outputname = '/mnt/DD/Bonds_Project/Aurea_Project/Input/S1B/' + ''.join(self.timestamp) + '_otsu_thresh.tiff'
+        # determining output name
+        outputname = '/mnt/DD/Bonds_Project/Aurea_Project/Input/S1B/' + ''.join(self.timestamp) + \
+                     '_'+str(classe)+'_otsu_thresh.tiff'
         print('outputname: ' + outputname)
-        output = img_as_int(regions)
-        io.imsave(outputname, output)
+        output = img_as_ubyte(regions)
+        # Writing output with rasterio with same CRS as input
+        with rasterio.open(outputname, 'w', **profile) as dst:
+            dst.write(output)
         # io.imsave(outputname, output)
         print(''.join(self.getTimestamp()) + ' is done')
 
     def do_binarize(self):
         input_array = io.imread(self.path)
+
 
 def multiotsu(image, classe=3, nbins=256):
     print('reading image')
@@ -150,7 +179,9 @@ def multiotsu(image, classe=3, nbins=256):
     plt.subplots_adjust()
     plt.show()
     print('saving image')
-    plt.imsave('/home/marielouise/Images/MapOtsu.tiff', output)
+    #outname= image.split('_2020')
+    #plt.imsave('/home/marielouise/Images/'+image+'_MapOtsu.tiff', output)
+    imageio.imwrite('/home/marielouise/Images/MapOtsu.tiff', output)
 
 def imageSearchtif(folder):
     for images in glob.glob(folder + "*.tif"):
