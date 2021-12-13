@@ -89,7 +89,7 @@ class Image:
         return self.timestamp
 
     def do_otsu(self):
-        # Single otsu binary threshold
+        # Single otsu binary threshold if it does not work use multiotsu 2 classes or 3 classes
         self.getTimestamp()
         threshold = threshold_otsu(io.imread(self.path, as_gray=True), 256)
         print('threshold is otsu ' + str(threshold))
@@ -99,7 +99,7 @@ class Image:
                    output)
         print(''.join(self.getTimestamp()) + ' is done')
 
-    # def do_multi_otsu(self,classe=3):
+    # def do_multi_otsu(self,classe=3): ancient version
     #     # First look at images
     #     # inputIm = rgb2gray(io.imread(self.path, plugin='gdal'))
     #     print('image has been read, determining thresholds')
@@ -114,11 +114,12 @@ class Image:
     #     # io.imsave(outputname, output)
     #     print(''.join(self.getTimestamp()) + ' is done')
 
-    def do_multi_otsu(self, classe=3):
+    def do_multi_otsu(self, classe=3, outputname=''):
+        print('doing multi otsu on')
         # First look at images
-        # inputIm = rgb2gray(io.imread(self.path, plugin='gdal'))
         # Use rasterio to keep georeferencing
         # First read image
+        print(self.path)
         with rasterio.open(self.path) as src:
             img = src.read()
             profile = src.profile
@@ -130,32 +131,28 @@ class Image:
         regions = np.digitize(img, bins=threshold)
         print('image has been digitized')
         # determining output name
-        outputname = '/mnt/DD/Bonds_Project/Aurea_Project/Input/S1B/' + ''.join(self.timestamp) + \
-                     '_'+str(classe)+'_otsu_thresh.tiff'
+        if not outputname:
+            outputname = '/mnt/DD/Bonds_Project/Aurea_Project/Input/S1B/' + ''.join(self.timestamp) + \
+                      '_'+str(classe)+'_otsu_thresh.tiff'
         print('outputname: ' + outputname)
         output = img_as_ubyte(regions)
         # Writing output with rasterio with same CRS as input
         with rasterio.open(outputname, 'w', **profile) as dst:
             dst.write(output)
-        # io.imsave(outputname, output)
         print(''.join(self.getTimestamp()) + ' is done')
-
-    def do_binarize(self):
-        input_array = io.imread(self.path)
 
 
 def multiotsu(image, classe=3, nbins=256):
     print('reading image')
-    img = io.imread(image,as_gray=True)
-    print('image is ready')
-    print('doing thresholding')
-    # img[img==0]=[np.nan]
-    # img = img[np.logical_not(np.isnan(img))]
+    # Use rasterio to keep georeferencing
+    # First read image
+    with rasterio.open(image) as src:
+        img = src.read()
+        profile = src.profile
     threshold = threshold_multiotsu(img, classe, nbins)
     print('number of class ' + str(classe) + '  number of bins ' + str(nbins) + ' ' + str(threshold))
     regions = np.digitize(img, bins=threshold)
     output = img_as_int(regions)
-    #plt.imsave('/mnt/DD/Bonds_Project/Aurea_Project/Input/multiotsu6.tiff', output)
     fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(10, 3.5))
     ax[0].imshow(img, cmap='gray')
     ax[0].set_title('Original')
@@ -168,7 +165,6 @@ def multiotsu(image, classe=3, nbins=256):
     ax[1].set_title('Histogram')
     for thresh in threshold:
         ax[1].axvline(thresh, color='r')
-
     # Plotting the Multi Otsu result.i
     print('ploting the multi otsu result')
     ax[2].imshow(regions, cmap='Accent')
@@ -178,10 +174,15 @@ def multiotsu(image, classe=3, nbins=256):
     # viewer.show()
     plt.subplots_adjust()
     plt.show()
-    print('saving image')
-    #outname= image.split('_2020')
-    #plt.imsave('/home/marielouise/Images/'+image+'_MapOtsu.tiff', output)
-    imageio.imwrite('/home/marielouise/Images/MapOtsu.tiff', output)
+    # determining output name
+    outputname = '/mnt/DD/Bonds_Project/Aurea_Project/Input/S1B/' + ''.join(self.timestamp) + \
+                 '_' + str(classe) + '_otsu_thresh.tiff'
+    print('outputname: ' + outputname)
+    output = img_as_ubyte(regions)
+    # Writing output with rasterio with same CRS as input
+    with rasterio.open(outputname, 'w', **profile) as dst:
+        dst.write(output)
+
 
 def imageSearchtif(folder):
     for images in glob.glob(folder + "*.tif"):
