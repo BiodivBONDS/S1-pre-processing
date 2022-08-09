@@ -1,3 +1,5 @@
+
+# abrido o mini.gtp pra pegar a posicao das minibacias #%% abrindo o mini.gtp
 import numpy as np
 import math
 import os
@@ -18,7 +20,7 @@ def factors(lat1_mini, lon1_mini, lat2_chuva, lon2_chuva, fac=2, viz=3):
     if max(lat1_mini.shape) != max(lon1_mini.shape) or max(lat2_chuva.shape) != max(lon2_chuva.shape):
         print('error value')
     else:
-        factor = np.zeros(n1_size_mini, n2_size_chuva)
+        factor = np.zeros((n1_size_mini,n2_size_chuva),dtype=float)
         # % detectando as menores distancias (1) e minibacias correspondentes (2)
         # On veut parcourir une boucle correspondant a l'ensemble des elements du tableau latitude 1
         #
@@ -29,8 +31,8 @@ def factors(lat1_mini, lon1_mini, lat2_chuva, lon2_chuva, fac=2, viz=3):
             diflon = np.subtract(lon1_mini[i], lon2_chuva)
             dist = np.sqrt(np.add(np.square(diflat), np.square(diflon)))
             # disthypot = np.hypot((np.subtract(lat_mini[0],latreshaped)),(np.subtract(lon_mini[0],longreshaped)))
-            print('dist is done now inverting distance ' + dist)
-            dist=dist[...,None]  # Formule pour transposer np.atleast_2d(arr).T
+            # print('dist is done now inverting distance ' + dist)
+            dist = dist[...,None]  # Formule pour transposer np.atleast_2d(dist).T
             print('sorting distance')
             dist = dist[dist[:,0].argsort()]
             # dist[np.lexsort(dist.T[::-1])] #formule pour sortrow
@@ -77,7 +79,7 @@ def paramarie(inputdata='C:\\Bonds\\MINI.GTP', netcdfinput='', longitude='', lat
         precipitation = netcdf_precipitation[:]
         arraydate = netcdf_date[:]
     else:
-        precipitation = np.open(inputprecipitationmatrix)
+        precipitation = np.fromfile(inputprecipitationmatrix)
         # minimal coordinate localisation in array
         lon_chuva = np.fromfile(longitude)
         print('lon has been read')
@@ -99,4 +101,5 @@ def paramarie(inputdata='C:\\Bonds\\MINI.GTP', netcdfinput='', longitude='', lat
 
     #  Chuvabin = La pluie correspond a chaque jour en colonne et en ligne/
     #                                                       le nombre de bassins
+
 
