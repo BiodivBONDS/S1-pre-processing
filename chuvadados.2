@@ -1,0 +1,124 @@
+#import numpy as np
+#import idw
+#import math
+
+
+# abrido o mini.gtp pra pegar a posicao das minibacias #%% abrindo o mini.gtp
+import numpy
+import numpy as np
+import math
+import os
+import netCDF4
+import numpy.ma as ma
+
+
+
+def factors(lat1_mini, lon1_mini, lat2_chuva, lon2_chuva, fac=2, viz=3):
+    # initialisation variables
+    n1_size_mini = max(lat1_mini.shape)
+    n2_size_chuva = max(lat2_chuva.shape)
+    #dist = np.zeros(shape=[2, n2_size_chuva])
+    #print(dist)
+    # lon_chuva = lon2_chuva
+    # lat et long are coordinates vector
+    # factors = IDW(
+    # % lat e lon = vetor coluna com as coordenadas
+    # % fac= expoente da distancia inversa
+    # % viz= numero de vizinhos considerados
+    if max(lat1_mini.shape) != max(lon1_mini.shape) or max(lat2_chuva.shape) != max(lon2_chuva.shape):
+        print('error value')
+    else:
+        factor = np.zeros((n1_size_mini,n2_size_chuva),dtype=float)
+        # % detectando as menores distancias (1) e minibacias correspondentes (2)
+        # On veut parcourir une boucle correspondant a l'ensemble des elements du tableau latitude 1
+        #
+        for i in range(n1_size_mini):
+            print('looping')
+            print(' iteration' + str(i))
+            diflat = np.subtract(lat1_mini[i], lat2_chuva)
+            diflon = np.subtract(lon1_mini[i], lon2_chuva)
+            dist = np.sqrt(np.add(np.square(diflat), np.square(diflon)))
+            # disthypot = np.hypot((np.subtract(lat_mini[0],latreshaped)),(np.subtract(lon_mini[0],longreshaped)))
+            # print('dist is done now inverting distance ' + dist)
+            dist = dist[...,None]  # Formule pour transposer np.atleast_2d(dist).T
+            print('sorting distance')
+            dist = dist[dist[:,0].argsort()]
+            # dist[np.lexsort(dist.T[::-1])] #formule pour sortrow
+            # arr[np.lexsort(arr.T[::-1])]
+            # dist = [dist(1:n2)'] ca c'est la transposition
+            print('calculating den')
+            den = sum(np.float_power(dist[0:viz], int(-fac)))
+            print(den)
+            print('second looping')
+            for j in range(0, viz):
+                print(' iteration' + str(j))
+                np.append(factor[i, j], np.float_power(dist[j], (-fac / den)))
+                # pour le mini bassin i on pousse la valeur de distance pondéré par le facteur /den
+                # le but est d'obtenir une matrice factor avec tout les mini bassins et pour chaque ligne de mini bassins
+            print(factor.shape)
+        return factor
+
+
+def paramarie(inputdata='C:\\Bonds\\MINI.GTP', netcdfinput='', longitude='', latitude='', inputprecipitationmatrix='', chuvabin=''):
+
+    print('precipitation matrix has been read')
+    fac = 2  # factor of ponderation
+    print(' factor' + str(fac))
+    viz = 3  # numero de vizinhos
+    print('viz' + str(viz))
+
+    # Load input arrays from mini gtp
+    lat_mini = np.loadtxt(inputdata, skiprows=1, usecols=3)
+    print(lat_mini)
+    # deprecated      lon_mini , lat_mini = minigtp1[3]
+    lon_mini = np.loadtxt(inputdata, skiprows=1, usecols=2)
+    print(lon_mini)
+    # Load chuva dados from netcdf
+    if netcdfinput:
+        netcdfdataSet = netCDF4.Dataset(netcdfinput)
+        netcdf_longitude = netcdfdataSet.variables['longitude']
+        netcdf_latitude = netcdfdataSet.variables['latitude']
+        netcdf_precipitation = netcdfdataSet.variables['precipitation']
+        netcdf_date = netcdfdataSet.variables['date']
+        # print(netcdf_date, netcdf_latitude,netcdf_longitude,netcdf_latitude,netcdf_precipitation)
+        lon_chuva = netcdf_longitude[:]
+        lat_chuva = netcdf_latitude[:]
+        lon_chuva = np.reshape(lon_chuva, -1, order='F')
+        lat_chuva = np.reshape(lat_chuva, -1, order='C')
+        precipitation = netcdf_precipitation[:]
+        #precipitation = np.swapaxes(precipitation,0,1)
+        precipitation_2 = precipitation.reshape(7336, 8550, order='F')
+        #precipitation_2=np.moveaxis(precipitation_2,1,-1)
+        arraydate = netcdf_date[:]
+    else:
+        precipitation = np.fromfile(inputprecipitationmatrix)
+        precipitation_2=precipitation.reshape(7336, 8550, order='F')
+        # minimal coordinate localisation in array
+        lon_chuva = np.fromfile(longitude)
+        print('lon has been read')
+        lat_chuva = np.fromfile(latitude)
+        print('lat has been read')
+    # % funcao que cria uma matriz de ponderacao dimensao (numero de minibacias x numero de pontos)
+    # % Precipitacao do MGB (n de minibacias x n de pontos) x (n de pontos x n de dias) = (n de minibacias x n de dias)
+
+    idw = np.moveaxis(factors(lat_mini, lon_mini, lat_chuva, lon_chuva, fac, viz),-1,0)
+    print('precipitation shape = ' + str(precipitation_2.shape))
+    print('idw shape = '+ str(idw.shape))
+    p_MGB = numpy.dot(precipitation_2, idw) # matrice du nombre de minibassins
+    # Ponderation liee a l'interpolation
+    # %% gravar novo chuvabin
+    # %% Output
+    if chuvabin:
+        fid2 = chuvabin
+        #np.ma.MaskedArray.tofile(fid2, p_MGB)
+        np.savez(fid2,p_MGB)
+    else:
+        print(os.getcwd())
+        fid2 = 'chuvabin.bin'
+        #np.ma.MaskedArray.tofile(fid2, p_MGB)
+        np.savez(fid2,p_MGB)
+
+    #  Chuvabin = La pluie correspond a chaque jour en colonne et en ligne/
+    #                                                       le nombre de bassins
+
+
