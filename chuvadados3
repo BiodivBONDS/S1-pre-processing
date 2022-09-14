@@ -82,7 +82,7 @@ def factors(lat1_mini, lon1_mini, lat2_chuva, lon2_chuva, fac=2, viz=3):
     return factor
 
 
-def paramarie(inputdata='C:\\Bonds\\chuva\\MINI.GTP', netcdfinput='C:\\Bonds\\chuva\\3B-DAY.MS.MRG.3IMERG.20000602-S000000-E235959.V06.nc4.nc4', inputdir='C:\\Bonds\\chuva\\test', longitude='', latitude='', inputprecipitationmatrix='',
+def paramarie(inputdata='C:\\Bonds\\chuva\\MINI.GTP', netcdfinput='C:\\Bonds\\chuva\\3B-DAY.MS.MRG.3IMERG.20000602-S000000-E235959.V06.nc4.nc4', inputdir='C:\\Bonds\\chuva\\IMERG-nc\\', longitude='', latitude='', inputprecipitationmatrix='',
               chuvabin='chuvabin.bin'):
     print('precipitation matrix has been read')
     fac = 2  # factor of ponderation
@@ -134,7 +134,7 @@ def paramarie(inputdata='C:\\Bonds\\chuva\\MINI.GTP', netcdfinput='C:\\Bonds\\ch
         precipitation = np.moveaxis(precipitation, -1, 0)
     # % funcao que cria uma matriz de ponderacao dimensao (numero de minibacias x numero de pontos)
     idw = factors(lat_mini, lon_mini, lat_chuva, lon_chuva, fac, viz)
-    p_MGB = np.zeros(shape=(max(lat_mini.shape), 1))
+    p_MGB = np.zeros(shape=(max(lat_mini.shape), 0))
     for eachdate in glob.glob(inputdir + '\\*'):
         print('doing file  ' + str(eachdate))
         print(step)
@@ -150,9 +150,9 @@ def paramarie(inputdata='C:\\Bonds\\chuva\\MINI.GTP', netcdfinput='C:\\Bonds\\ch
         print(p_MGB.shape)
     # print(max(p_MGB))
     # print(min(p_MGB))
-    p_MGB = np.swapaxes(p_MGB, -1, 0)
-    print(p_MGB)
-    print(p_MGB.shape)
+    p_MGB2 = np.swapaxes(p_MGB, -1, 0)
+    print(p_MGB2)
+    print(p_MGB2.shape)
     # print(p_MGB.shape)
     # matrice du nombre de minibassins
     # Ponderation liee a l'interpolation
@@ -168,17 +168,22 @@ def paramarie(inputdata='C:\\Bonds\\chuva\\MINI.GTP', netcdfinput='C:\\Bonds\\ch
 
     if chuvabin:
         fid = chuvabin
+        fid2='bis'+chuvabin
     else:
         fid = 'chuvabin.bin'
+        fid2= 'bischuvabin.bin'
     try:
-        write_mgb_binary(filename=fid, data=p_MGB)
+        write_mgb_binary(filename=fid2,data=p_MGB)
+        write_mgb_binary(filename=fid, data=p_MGB2)
         print('function Adrien has worked')
     except Exception:
         print('fonction Adrien has not been saved')
     try:
-        np.save('ma_saved.bin', np.ma.filled(p_MGB, -999))
-        np.save('testallbassin.csv', np.ma.filled(p_MGB, -999))
+        np.save('ma_savedminibassinxdate.bin', np.ma.filled(p_MGB, -999))
+        np.save('ma_savedminibassinxdate.csv', np.ma.filled(p_MGB, -999))
         np.save('precipitation.csv', np.ma.filled(precipitation, -999))
+        np.save('ma_saveddatexminibassin.bin', np.ma.filled(p_MGB2, -999))
+        np.save('ma_saveddatexminibassin.csv', np.ma.filled(p_MGB2, -999))
         print('another save')
     except NotImplementedError:
         print('not implemented yet')
