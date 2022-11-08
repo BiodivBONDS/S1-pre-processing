@@ -1,0 +1,214 @@
+import ctypes
+
+import numpy
+import numpy as np
+import math
+import os
+import netCDF4
+import glob
+import struct
+
+
+def loic_array_to_binary(filename,inputarray,format='=%sf'):
+    s = struct.pack(format % inputarray.size, *inputarray.flatten('F'))
+    f = open(filename, 'wb')
+    f.write(s)
+    f.close()
+
+
+def loic_array_to_binary2(inputarray):
+    res = (ctypes.c_double * len(inputarray))()
+    res[:] = inputarray
+    return res
+
+
+def write_mgb_binary(filename, data):
+    "Function to write a mgb binary file in the bin format"
+    if os.path.isfile(filename):
+        newFile = open(filename, "wb")
+        data = np.ravel(data)
+        newFileByteArray = bytearray(data)
+        newFile.write(newFileByteArray)
+        newFile.close()
+    else:
+        newFile = open(filename, "wb")
+        data = np.ravel(data)
+        newFileByteArray = bytearray(data)
+        newFile.write(newFileByteArray)
+        newFile.close()
+
+
+def harvesine(lon1, lat1, lon2, lat2):
+    " Function to calculate from a radian distance to a kilometers distance the euclidian distance between two coordinates"
+    rad = math.pi / 180  # degree to radian
+    earthradius = 6378.1  # earth average radius at equador (km)
+    dlon = (lon2 - lon1) * rad
+    dlat = (lat2 - lat1) * rad
+    a = (math.sin(dlat / 2)) ** 2 + math.cos(lat1 * rad) * \
+        math.cos(lat2 * rad) * (math.sin(dlon / 2)) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    d = earthradius * c
+    return d
+
+
+def factors(lat1_mini, lon1_mini, lat2_chuva, lon2_chuva, fac=2, viz=3):
+    " Function to calculate the matrix of precipitation for each n  minibassins for each p dates"
+    n1_size_mini = max(lat1_mini.shape)
+    n2_size_chuva = max(lat2_chuva.shape)
+
+    # if max(lat1_mini.shape) != max(lon1_mini.shape) or max(lat2_chuva.shape) != max(lon2_chuva.shape):
+    #     print('error value')
+    # else:
+    factor = np.zeros((n1_size_mini, n2_size_chuva), dtype=float)
+    # % detectando as menores distancias (1) e minibacias correspondentes (2)
+    # On veut parcourir une boucle correspondant a l'ensemble des elements du tableau latitude 1
+    #
+    for i in range(max(lat1_mini.shape)):
+        dist = []
+        for j in range(max(lat2_chuva.shape)):
+            d = harvesine(lon1_mini[i], lat1_mini[i], lon2_chuva[j], lat2_chuva[j])
+            dist.append(d)
+        distarray = np.array(dist)
+        # distarray = distarray.argsort()[:viz]
+        # print(distarray.argsort()[:viz])
+        dist.sort()
+        den = 0
+        for eachnumbers in range(0, viz):
+            den += float(dist[eachnumbers] ** -2)
+            # print(dist[ji])
+        for p in range(0, viz):
+            # print(dist[p]**(-fac)/den)
+            # print(dist[p])
+            factor[i, distarray.argsort()[p]] = dist[p] ** (-fac) / den
+            if i == 0:
+                print(dist[p])
+                print('den' + str(den))
+        # if i == 0:
+        # distarraytemp = distarray
+        # print('factors= '+str(factor[i,p]))
+    # print(factor[0, :])
+    # print(min(factor[0,:]),max(factor[0,:]))
+    # print(factor[int(n1_size_mini/2), :])
+    # print(min(factor[int(n1_size_mini/2),:]),max(factor[int(n1_size_mini/2),:]))
+    # print(min(factor[n1_size_mini-1,:]),max(factor[n1_size_mini-1,:]))
+    return factor
+
+
+def paramarie(inputdata='C:\\Bonds\\chuva\\MINI.GTP', netcdfinput='C:\\Bonds\\chuva\\IMERG-nc20012014\\3B-DAY.MS.MRG.3IMERG.20010101-S000000-E235959.V06.nc4.nc4', inputdir='C:\\Bonds\\chuva\\IMERG-nc20012014\\', longitude='', latitude='', inputprecipitationmatrix='',
+              chuvabin='chuvabin.bin', fac=2, viz=3, fractionned=True):
+    # Opening function , the function take as input a netcdf precipitation file with latitude and longitude vectors arrays
+    print('precipitation matrix has been read')  # factor of ponderation
+    print(' factor' + str(fac))  # factor value for distance interpolation
+    print('viz' + str(viz))  # number of neighboor for an interpolated pixel
+
+
+    # Load input arrays from mini gtp
+    lat_mini = np.loadtxt(inputdata, skiprows=1, usecols=3)
+    # print(lat_mini)
+    # deprecated      lon_mini , lat_mini = minigtp1[3]
+    lon_mini = np.loadtxt(inputdata, skiprows=1, usecols=2)
+    # print(lon_mini)
+    # Load chuva dados from netcdf
+    if netcdfinput:
+        netcdfdataSet = netCDF4.Dataset(netcdfinput)
+        netcdf_longitude = netcdfdataSet.variables['lon']
+        netcdf_latitude = netcdfdataSet.variables['lat']
+        netcdf_precipitation = netcdfdataSet.variables['precipitationCal']
+        # netcdf_date = netcdfdataSet.variables['time']
+        # print(netcdf_date, netcdf_latitude,netcdf_longitude,netcdf_latitude,netcdf_precipitation)
+        lon_chuva = netcdf_longitude[:]
+        # print(lon_chuva)
+        lat_chuva = netcdf_latitude[:]
+        x, y = np.float32(np.meshgrid(lon_chuva, lat_chuva))
+        lon_chuva = np.ravel(x) # function to splash the array into an 1D array
+        lat_chuva = np.ravel(y)
+        # lon_chuva = np.reshape(lon_chuva, -1, order='F')
+        # lat_chuva = np.reshape(lat_chuva, -1, order='F')
+        precipitation = netcdf_precipitation[:]
+        precipitation = np.transpose(precipitation)
+        # precipitation = np.swapaxes(precipitation,0,1)
+        # precipitation = precipitation.reshape(1, 25760, order='F')
+        precipitation = np.ravel(precipitation)
+        # print(precipitation.shape)
+        # precipitation = np.moveaxis(precipitation, -1, 0)
+        # arraydate = netcdf_date[:]
+    else:
+        lon_chuva = np.fromfile(longitude)
+        print('lon has been read')
+        lat_chuva = np.fromfile(latitude)
+        print('lat has been read')
+        x, y = np.float32(np.meshgrid(lon_chuva, lat_chuva))
+        lon_chuva = np.ravel(x)
+        lat_chuva = np.ravel(y)
+        precipitation = np.fromfile(inputprecipitationmatrix)
+        precipitation = precipitation.reshape(1, max(lon_chuva.shape), order='F')
+        precipitation = np.moveaxis(precipitation, -1, 0)
+    # % funcao que cria uma matriz de ponderacao dimensao (numero de minibacias x numero de pontos)
+    idw = factors(lat_mini, lon_mini, lat_chuva, lon_chuva, fac, viz)
+    p_MGB = np.zeros(shape=(max(lat_mini.shape), 0))
+    # loop for a fractionned date input
+    if fractionned:
+        step = 0  # Step for fractionned files date
+        p_MGB = np.zeros(shape=(max(lat_mini.shape), len(os.listdir(inputdir))))
+        for eachdate in glob.glob(inputdir + '\\*'):
+            print('doing file  ' + str(eachdate))
+            print(step)
+            # On obtient 7792 fichier: On veut une matrice en 7792x439
+            netcdftmp = netCDF4.Dataset(eachdate)
+            eachdateprecipitation = netcdftmp.variables['precipitationCal'][:]
+            eachdateprecipitation = np.transpose(eachdateprecipitation)
+            eachdateprecipitation = np.ravel(eachdateprecipitation)
+            # % Precipitacao do MGB (n de minibacias x n de pontos) x (n de pontos x n de dias) = (n de minibacias x n de dias)
+            p_MGB[:,step] = numpy.dot(idw, eachdateprecipitation)
+            #p_MGB=np.c_[p_MGB,numpy.dot(idw, eachdateprecipitation)]
+            step= step+1
+            print(p_MGB)
+            print(p_MGB.shape)
+    # print(max(p_MGB))
+    # print(min(p_MGB))
+    p_MGB2 = np.swapaxes(p_MGB, -1, 0)
+    print(p_MGB2)
+    print(p_MGB2.shape)
+    # print(p_MGB.shape)
+    # matrice du nombre de minibassins
+    # Ponderation liee a l'interpolation
+    # %% Output
+    print(os.getcwd())
+    # print(distarraytemp.argsort()[:viz])
+    # for values in distarraytemp.argsort()[:viz]:
+    # print(precipitation[int(distarraytemp.argsort()[values])])
+
+    # for values in distarraytemp.argsort()[:viz]:
+    # print(float(precipitation[int(values),])
+    # bassin1[values]=precipitation[int(values),]
+
+    if chuvabin:
+        fid = chuvabin
+        fid2='bis'+chuvabin
+    else:
+        fid = 'chuvabin.bin'
+        fid2= 'bischuvabin.bin'
+    try:
+        loic_array_to_binary(fid, np.ma.filled(p_MGB),format='f')
+        #write_mgb_binary(filename=fid2, data=np.ma.filled(p_MGB))
+        #write_mgb_binary(filename=fid, data=np.ma.filled(p_MGB2))
+        print('function Adrien has worked')
+    except Exception:
+        print('fonction Adrien has not been saved')
+    try:
+        np.save('ma_savedminibassinxdate.bin', np.ma.filled(p_MGB, -999))
+        np.save('ma_savedminibassinxdate.csv', np.ma.filled(p_MGB, -999))
+        np.save('precipitation.csv', np.ma.filled(precipitation, -999))
+        np.save('ma_saveddatexminibassin.bin', np.ma.filled(p_MGB2, -999))
+        np.save('ma_saveddatexminibassin.csv', np.ma.filled(p_MGB2, -999))
+        print('another save')
+    except NotImplementedError:
+        print('not implemented yet')
+    try:
+        np.save('simplesaved.bin', p_MGB)
+    except NotImplementedError:
+        print('not impletemented yet it seems')
+        print('something went wrong')
+
+#  Chuvabin = La pluie correspond a chaque jour en colonne et en ligne/
+#                                                       le nombre de bassins
