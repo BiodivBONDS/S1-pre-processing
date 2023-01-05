@@ -189,7 +189,7 @@ def paramarie(inputdata='C:\\Bonds\\chuva\\MINI.GTP', netcdfinput='C:\\Bonds\\ch
         fid = 'chuvabin.bin'
         fid2= 'bischuvabin.bin'
     try:
-        loic_array_to_binary(fid, np.ma.filled(p_MGB),format='f')
+        loic_array_to_binary(fid, np.ma.filled(p_MGB),format='=%sf')
         #write_mgb_binary(filename=fid2, data=np.ma.filled(p_MGB))
         #write_mgb_binary(filename=fid, data=np.ma.filled(p_MGB2))
         print('function Adrien has worked')
