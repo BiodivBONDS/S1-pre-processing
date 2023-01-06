@@ -150,7 +150,7 @@ def paramarie(inputdata='C:\\Bonds\\chuva\\MINI.GTP', netcdfinput='C:\\Bonds\\ch
     if fractionned:
         step = 0  # Step for fractionned files date
         p_MGB = np.zeros(shape=(max(lat_mini.shape), len(os.listdir(inputdir))))
-        for eachdate in glob.glob(inputdir + '\\*'):
+        for eachdate in sorted(glob.glob(inputdir + '\\*')):
             print('doing file  ' + str(eachdate))
             print(step)
             # On obtient 7792 fichier: On veut une matrice en 7792x439
